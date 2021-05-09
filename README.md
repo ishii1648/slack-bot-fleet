@@ -1,3 +1,3 @@
 # What is this?
 
-`slack-bot-fleet` is PoC for Slack APP.
+`slack-bot-fleet` is PoC for Slack App.
