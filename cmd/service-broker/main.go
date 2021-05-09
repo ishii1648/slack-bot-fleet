@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/ishii1648/slack-bot-fleet/pkg/crzerolog"
-	event "github.com/ishii1648/slack-bot-fleet/pkg/event-api-server"
+	broker "github.com/ishii1648/slack-bot-fleet/pkg/service-broker"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -38,12 +38,12 @@ func Run(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	logger := log.Ctx(r.Context())
 
-	body, err := event.Auth(ctx, logger, r)
+	body, err := broker.Auth(ctx, logger, r)
 	if err != nil {
 		return err
 	}
 
-	if err := event.Proxy(logger, w, body); err != nil {
+	if err := broker.Proxy(ctx, logger, w, body); err != nil {
 		return err
 	}
 
