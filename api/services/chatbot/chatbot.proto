@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package chatbot;
+
+option go_package = "pb;chatbot";
+
+service Chatbot {
+    rpc Reply (Request) returns (Result) {}
+}
+
+message Request {
+    string reaction = 1;
+    string itemUser = 2;
+    EventItem item = 3;
+}
+
+message EventItem {
+    string channel = 1;
+    string msgTimestamp = 2;
+}
+
+message Result {
+    string message = 1;
+}
