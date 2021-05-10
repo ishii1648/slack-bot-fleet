@@ -15,7 +15,7 @@ message Request {
 }
 
 message EventItem {
-    string channel = 1;
+    string channelID = 1;
     string msgTimestamp = 2;
 }
 

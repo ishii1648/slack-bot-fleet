@@ -15,83 +15,131 @@ import (
 	pb "github.com/ishii1648/slack-bot-fleet/api/services/chatbot"
 	"github.com/rs/zerolog"
 	"github.com/slack-go/slack"
+
 	"github.com/slack-go/slack/slackevents"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 )
 
-func Proxy(ctx context.Context, l *zerolog.Logger, w http.ResponseWriter, body []byte) error {
+func Proxy(ctx context.Context, l *zerolog.Logger, w http.ResponseWriter, body []byte) (msg, channelID string, err error) {
 	eventsAPIEvent, err := slackevents.ParseEvent(json.RawMessage(body), slackevents.OptionNoVerifyToken())
 	if err != nil {
-		return err
+		return "", "", err
 	}
 
 	switch eventsAPIEvent.Type {
 	case slackevents.URLVerification:
 		var res *slackevents.ChallengeResponse
 		if err := json.Unmarshal(body, &res); err != nil {
-			return err
+			return "", "", err
 		}
 
 		w.Header().Set("Content-Type", "text/plain")
 		if _, err := w.Write([]byte(res.Challenge)); err != nil {
-			return err
+			return "", "", err
 		}
 	case slackevents.CallbackEvent:
 		innerEvent := eventsAPIEvent.InnerEvent
 		switch event := innerEvent.Data.(type) {
 		case *slackevents.ReactionAddedEvent:
-			api := slack.New(os.Getenv("SLACK_BOT_TOKEN"))
-			channel, err := api.GetConversationInfo(event.Item.Channel, false)
+			service := &Service{
+				ctx:  ctx,
+				l:    l,
+				item: event.Item,
+			}
+
+			msg, err := service.proxy(event.Reaction, event.User)
 			if err != nil {
-				return err
+				return "", event.Item.Channel, err
 			}
-			if event.Reaction == "raised_hands" && channel.Name == "development" {
-				r := &pb.Request{
-					Reaction: event.Reaction,
-					Item: &pb.EventItem{
-						Channel:      channel.Name,
-						MsgTimestamp: event.Item.Timestamp,
-					},
-				}
 
-				chatbotAddr := os.Getenv("CHATBOT_ADDR")
-				if chatbotAddr == "" {
-					return errors.New("CHATBOT_ADDR is missing")
-				}
-
-				conn, err := newConn(chatbotAddr)
-				if err != nil {
-					return err
-				}
-
-				idToken, err := getIDToken(chatbotAddr)
-				if err != nil {
-					return err
-				}
-
-				c := pb.NewChatbotClient(conn)
-
-				md := metadata.New(map[string]string{"authorization": fmt.Sprintf("Bearer %s", idToken)})
-				ctx = metadata.NewOutgoingContext(ctx, md)
-
-				result, err := c.Reply(ctx, r)
-				if err != nil {
-					return err
-				}
-				l.Info().Msgf("result : %v", result)
-			}
+			return msg, event.Item.Channel, nil
+		default:
+			return "", "", nil
 		}
-		return nil
 	case slackevents.AppRateLimited:
-		l.Error().Msg("app's event subscriptions are being rate limited")
-		return nil
+		return "", "", errors.New("app's event subscriptions are being rate limited")
 	default:
-		return nil
+		return "", "", nil
 	}
 
-	return nil
+	return "", "", nil
+}
+
+type Service struct {
+	ctx  context.Context
+	l    *zerolog.Logger
+	item slackevents.Item
+}
+
+func (s *Service) proxy(reaction, eventUserID string) (string, error) {
+	api := slack.New(os.Getenv("SLACK_BOT_TOKEN"))
+
+	channel, err := api.GetConversationInfo(s.item.Channel, false)
+	if err != nil {
+		return "", err
+	}
+
+	user, err := api.GetUserInfo(eventUserID)
+	if err != nil {
+		return "", err
+	}
+
+	var result *pb.Result
+
+	if reaction == "raised_hands" && channel.Name == "development" && user.RealName == "しょーん" {
+		result, err = s.rpcWithChatbot(reaction, channel.ID)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return result.Message, nil
+}
+
+func (s *Service) rpcWithChatbot(reaction, channelID string) (*pb.Result, error) {
+	// msg, err := s.slack.FetchMsgByTs(s.item.Timestamp)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// s.l.Info().Msgf("message attached reaction : %s:%s", msg.Text, msg.User)
+
+	r := &pb.Request{
+		Reaction: reaction,
+		Item: &pb.EventItem{
+			ChannelID:    channelID,
+			MsgTimestamp: s.item.Timestamp,
+		},
+	}
+
+	chatbotAddr := os.Getenv("CHATBOT_ADDR")
+	if chatbotAddr == "" {
+		return nil, errors.New("CHATBOT_ADDR is missing")
+	}
+
+	conn, err := newConn(chatbotAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	idToken, err := getIDToken(chatbotAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	c := pb.NewChatbotClient(conn)
+
+	md := metadata.New(map[string]string{"authorization": fmt.Sprintf("Bearer %s", idToken)})
+	ctx := metadata.NewOutgoingContext(s.ctx, md)
+
+	result, err := c.Reply(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func newConn(addr string) (*grpc.ClientConn, error) {

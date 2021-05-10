@@ -1,3 +1,7 @@
+.PHONY: build
+build:
+	go build ./cmd/service-broker
+
 ## service-broker
 
 .PHONY: build-service-broker
@@ -32,4 +36,7 @@ deploy-chatbot: docker-push-chatbot
 
 .PHONY: go-proto
 go-proto:
-	protoc -I api/services/chatbot/ --go_out=plugins=grpc,paths=source_relative:api/services/chatbot/ api/services/chatbot/*.proto
+	protoc -I api/services/chatbot/ \
+		--go_out=api/services/chatbot/ --go_opt=paths=source_relative \
+		--go-grpc_out=api/services/chatbot/ --go-grpc_opt=paths=source_relative \
+		api/services/chatbot/*.proto
