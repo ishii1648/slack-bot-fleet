@@ -83,12 +83,7 @@ func Run(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	msg, channelID, err := broker.Proxy(ctx, logger, w, body)
-	if err != nil {
-		return err
-	}
-
-	if err := broker.Reply(logger, msg, channelID); err != nil {
+	if err := broker.Proxy(ctx, logger, w, body); err != nil {
 		return err
 	}
 

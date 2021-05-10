@@ -22,22 +22,22 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-func Proxy(ctx context.Context, l *zerolog.Logger, w http.ResponseWriter, body []byte) (msg, channelID string, err error) {
+func Proxy(ctx context.Context, l *zerolog.Logger, w http.ResponseWriter, body []byte) error {
 	eventsAPIEvent, err := slackevents.ParseEvent(json.RawMessage(body), slackevents.OptionNoVerifyToken())
 	if err != nil {
-		return "", "", err
+		return err
 	}
 
 	switch eventsAPIEvent.Type {
 	case slackevents.URLVerification:
 		var res *slackevents.ChallengeResponse
 		if err := json.Unmarshal(body, &res); err != nil {
-			return "", "", err
+			return err
 		}
 
 		w.Header().Set("Content-Type", "text/plain")
 		if _, err := w.Write([]byte(res.Challenge)); err != nil {
-			return "", "", err
+			return err
 		}
 	case slackevents.CallbackEvent:
 		innerEvent := eventsAPIEvent.InnerEvent
@@ -49,22 +49,21 @@ func Proxy(ctx context.Context, l *zerolog.Logger, w http.ResponseWriter, body [
 				item: event.Item,
 			}
 
-			msg, err := service.proxy(event.Reaction, event.User)
-			if err != nil {
-				return "", event.Item.Channel, err
+			if err := service.proxy(event.Reaction, event.User); err != nil {
+				return err
 			}
 
-			return msg, event.Item.Channel, nil
+			return nil
 		default:
-			return "", "", nil
+			return nil
 		}
 	case slackevents.AppRateLimited:
-		return "", "", errors.New("app's event subscriptions are being rate limited")
+		return errors.New("app's event subscriptions are being rate limited")
 	default:
-		return "", "", nil
+		return nil
 	}
 
-	return "", "", nil
+	return nil
 }
 
 type Service struct {
@@ -73,32 +72,29 @@ type Service struct {
 	item slackevents.Item
 }
 
-func (s *Service) proxy(reaction, eventUserID string) (string, error) {
+func (s *Service) proxy(reaction, eventUserID string) error {
 	api := slack.New(os.Getenv("SLACK_BOT_TOKEN"))
 
 	channel, err := api.GetConversationInfo(s.item.Channel, false)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	user, err := api.GetUserInfo(eventUserID)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	var result *pb.Result
-
 	if reaction == "raised_hands" && channel.Name == "development" && user.RealName == "しょーん" {
-		result, err = s.rpcWithChatbot(reaction, channel.ID)
-		if err != nil {
-			return "", err
+		if err := s.rpcWithChatbot(reaction, channel.ID); err != nil {
+			return err
 		}
 	}
 
-	return result.Message, nil
+	return nil
 }
 
-func (s *Service) rpcWithChatbot(reaction, channelID string) (*pb.Result, error) {
+func (s *Service) rpcWithChatbot(reaction, channelID string) error {
 	// msg, err := s.slack.FetchMsgByTs(s.item.Timestamp)
 	// if err != nil {
 	// 	return nil, err
@@ -116,17 +112,17 @@ func (s *Service) rpcWithChatbot(reaction, channelID string) (*pb.Result, error)
 
 	chatbotAddr := os.Getenv("CHATBOT_ADDR")
 	if chatbotAddr == "" {
-		return nil, errors.New("CHATBOT_ADDR is missing")
+		return errors.New("CHATBOT_ADDR is missing")
 	}
 
 	conn, err := newConn(chatbotAddr)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	idToken, err := getIDToken(chatbotAddr)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	c := pb.NewChatbotClient(conn)
@@ -136,10 +132,12 @@ func (s *Service) rpcWithChatbot(reaction, channelID string) (*pb.Result, error)
 
 	result, err := c.Reply(ctx, r)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return result, nil
+	s.l.Info().Msgf("recieve result from ChatBot.Reply : %v", result)
+
+	return nil
 }
 
 func newConn(addr string) (*grpc.ClientConn, error) {
