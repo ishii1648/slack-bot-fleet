@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"net/http"
 	"os"
 
@@ -10,7 +11,13 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+var (
+	disableAuthFlag = flag.Bool("disable-auth", false, "disable Verifying requests from Slack")
+)
+
 func main() {
+	flag.Parse()
+
 	rootLogger := zerolog.New(os.Stdout)
 	middleware := crzerolog.InjectLogger(&rootLogger)
 
@@ -38,7 +45,7 @@ func Run(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	logger := log.Ctx(r.Context())
 
-	body, err := broker.Auth(ctx, logger, r)
+	body, err := broker.Auth(ctx, logger, r, *disableAuthFlag)
 	if err != nil {
 		return err
 	}
