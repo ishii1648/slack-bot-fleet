@@ -7,11 +7,7 @@
 package chatbot
 
 import (
-	context "context"
 	proto "github.com/golang/protobuf/proto"
-	grpc "google.golang.org/grpc"
-	codes "google.golang.org/grpc/codes"
-	status "google.golang.org/grpc/status"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -310,84 +306,4 @@ func file_chatbot_proto_init() {
 	file_chatbot_proto_rawDesc = nil
 	file_chatbot_proto_goTypes = nil
 	file_chatbot_proto_depIdxs = nil
-}
-
-// Reference imports to suppress errors if they are not otherwise used.
-var _ context.Context
-var _ grpc.ClientConnInterface
-
-// This is a compile-time assertion to ensure that this generated file
-// is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion6
-
-// ChatbotClient is the client API for Chatbot service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
-type ChatbotClient interface {
-	Reply(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Result, error)
-}
-
-type chatbotClient struct {
-	cc grpc.ClientConnInterface
-}
-
-func NewChatbotClient(cc grpc.ClientConnInterface) ChatbotClient {
-	return &chatbotClient{cc}
-}
-
-func (c *chatbotClient) Reply(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Result, error) {
-	out := new(Result)
-	err := c.cc.Invoke(ctx, "/chatbot.Chatbot/Reply", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// ChatbotServer is the server API for Chatbot service.
-type ChatbotServer interface {
-	Reply(context.Context, *Request) (*Result, error)
-}
-
-// UnimplementedChatbotServer can be embedded to have forward compatible implementations.
-type UnimplementedChatbotServer struct {
-}
-
-func (*UnimplementedChatbotServer) Reply(context.Context, *Request) (*Result, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Reply not implemented")
-}
-
-func RegisterChatbotServer(s *grpc.Server, srv ChatbotServer) {
-	s.RegisterService(&_Chatbot_serviceDesc, srv)
-}
-
-func _Chatbot_Reply_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Request)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ChatbotServer).Reply(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/chatbot.Chatbot/Reply",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ChatbotServer).Reply(ctx, req.(*Request))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-var _Chatbot_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "chatbot.Chatbot",
-	HandlerType: (*ChatbotServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "Reply",
-			Handler:    _Chatbot_Reply_Handler,
-		},
-	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "chatbot.proto",
 }

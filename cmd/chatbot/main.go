@@ -13,7 +13,9 @@ import (
 	"google.golang.org/grpc/reflection"
 )
 
-type server struct{}
+type server struct {
+	pb.UnimplementedChatbotServer
+}
 
 func (s *server) Reply(ctx context.Context, r *pb.Request) (*pb.Result, error) {
 	l := log.Ctx(ctx)
