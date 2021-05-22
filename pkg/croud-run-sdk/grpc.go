@@ -1,4 +1,4 @@
-package crzerolog
+package sdk
 
 import (
 	"context"

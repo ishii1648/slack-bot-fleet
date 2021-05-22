@@ -1,5 +1,4 @@
-// Package crzerolog provides a zerolog-based logger for Cloud Run.
-package crzerolog
+package sdk
 
 import (
 	"fmt"

@@ -1,4 +1,4 @@
-package crzerolog
+package sdk
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 // middleware implements http.Handler interface.
@@ -45,4 +46,32 @@ func (m *middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m.next.ServeHTTP(w, r)
+}
+
+func RegisterDefaultHTTPServer(fn func(w http.ResponseWriter, r *http.Request) error) *http.Server {
+	port := "8080"
+	if p := os.Getenv("PORT"); p != "" {
+		port = p
+	}
+
+	httpLogger := zerolog.New(os.Stdout)
+	middleware := InjectLogger(&httpLogger)
+	mux := http.NewServeMux()
+	mux.Handle("/", middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger := log.Ctx(r.Context())
+
+		if err := fn(w, r); err != nil {
+			logger.Error().Msgf("%v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("error"))
+			return
+		}
+
+		w.Write([]byte("ok"))
+	})))
+
+	return &http.Server{
+		Addr:    ":" + port,
+		Handler: mux,
+	}
 }

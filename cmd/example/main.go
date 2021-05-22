@@ -6,7 +6,7 @@ import (
 	"os"
 
 	pb "github.com/ishii1648/slack-bot-fleet/api/services/chatbot"
-	"github.com/ishii1648/slack-bot-fleet/pkg/crzerolog"
+	// "github.com/ishii1648/slack-bot-fleet/pkg/crzerolog"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
