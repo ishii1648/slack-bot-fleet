@@ -1,5 +1,6 @@
-/service-broker
-/chatbot
+# /service-broker
+# /chatbot
+/bin/*
 
 
 go.sum

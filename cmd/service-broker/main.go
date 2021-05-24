@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ishii1648/slack-bot-fleet/pkg/crzerolog"
-	broker "github.com/ishii1648/slack-bot-fleet/pkg/service-broker"
+	sdk "github.com/ishii1648/slack-bot-fleet/pkg/cloud-run-sdk"
+	broker "github.com/ishii1648/slack-bot-fleet/service-broker"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -24,7 +24,7 @@ func main() {
 
 	logger := zerolog.New(os.Stdout)
 
-	srv := RegisterHTTPServer()
+	srv := sdk.RegisterDefaultHTTPServer(Run)
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
 			logger.Error().Msgf("failed to ListenAndServe : %v", err)
@@ -32,10 +32,10 @@ func main() {
 	}()
 
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGTERM)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 
 	<-sigCh
-	logger.Info().Msg("recive SIGTERM")
+	logger.Info().Msg("recive SIGTERM or SIGINT")
 
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 
@@ -44,34 +44,6 @@ func main() {
 	}
 
 	logger.Info().Msg("HTTP Server shutdowned")
-}
-
-func RegisterHTTPServer() *http.Server {
-	port := "8080"
-	if p := os.Getenv("PORT"); p != "" {
-		port = p
-	}
-
-	httpLogger := zerolog.New(os.Stdout)
-	middleware := crzerolog.InjectLogger(&httpLogger)
-	mux := http.NewServeMux()
-	mux.Handle("/", middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		logger := log.Ctx(r.Context())
-
-		if err := Run(w, r); err != nil {
-			logger.Error().Msgf("%v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("error"))
-			return
-		}
-
-		w.Write([]byte("ok"))
-	})))
-
-	return &http.Server{
-		Addr:    ":" + port,
-		Handler: mux,
-	}
 }
 
 func Run(w http.ResponseWriter, r *http.Request) error {

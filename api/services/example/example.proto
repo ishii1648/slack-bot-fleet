@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-package chatbot;
+package example;
 
-option go_package = "pb;chatbot";
+option go_package = "github.com/ishii1648/slack-bot-fleet/api/services/example";
 
-service Chatbot {
+service Example {
     rpc Reply (Request) returns (Result) {}
 }
 
