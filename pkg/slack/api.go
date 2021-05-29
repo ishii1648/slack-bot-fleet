@@ -1,4 +1,4 @@
-package broker
+package slack
 
 import (
 	"fmt"
@@ -44,6 +44,4 @@ func (s *Slack) FetchRepositoryNameByTs(item *slackevents.Item) (string, error) 
 	default:
 		return "", fmt.Errorf("invalid input : %s", res.Messages[0].Text)
 	}
-
-	return "", nil
 }
