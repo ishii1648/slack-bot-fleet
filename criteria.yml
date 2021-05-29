@@ -1,0 +1,8 @@
+- service_name: example
+  type: reaction_added
+  users:
+    - s_ishii
+  item_channels:
+    - "development"
+  reaction:
+    - "ok_hand"

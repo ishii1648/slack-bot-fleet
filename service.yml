@@ -1,6 +1,0 @@
-- name: example
-  forward_condition:
-    - channel: "development"
-    - reaction: "ok_hand"
-    - users:
-        - s_ishii

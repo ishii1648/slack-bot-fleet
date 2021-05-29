@@ -1,0 +1,17 @@
+# reference. https://api.slack.com/events
+- service_name: test
+  type: reaction_added
+  users:
+    - s_ishii
+  item_channels:
+    - "development"
+  reactions:
+    - "ok_hand"
+---
+- service_name: test02
+  type: event_callback
+  event_users:
+    - s_ishii
+    - federer
+  event_channels:
+    - "development"
