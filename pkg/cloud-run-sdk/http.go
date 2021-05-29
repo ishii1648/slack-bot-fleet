@@ -35,7 +35,7 @@ func (m *middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			m.next.ServeHTTP(w, r)
 			return
 		}
-		trace := fmt.Sprintf("projects/%s/traces/%s", projectID, traceID)
+		trace := fmt.Sprintf("projects/%s/traces/%s", ProjectID, traceID)
 
 		l.UpdateContext(func(c zerolog.Context) zerolog.Context {
 			return c.Str("logging.googleapis.com/trace", trace)
@@ -48,30 +48,26 @@ func (m *middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	m.next.ServeHTTP(w, r)
 }
 
-func RegisterDefaultHTTPServer(fn func(w http.ResponseWriter, r *http.Request) error) *http.Server {
+func RegisterDefaultHTTPServer(fn func(w http.ResponseWriter, r *http.Request)) *http.Server {
 	port := "8080"
 	if p := os.Getenv("PORT"); p != "" {
 		port = p
+	}
+
+	hostAddr := "0.0.0.0"
+	if h := os.Getenv("HOST_ADDR"); h != "" {
+		hostAddr = h
 	}
 
 	httpLogger := zerolog.New(os.Stdout)
 	middleware := InjectLogger(&httpLogger)
 	mux := http.NewServeMux()
 	mux.Handle("/", middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		logger := log.Ctx(r.Context())
-
-		if err := fn(w, r); err != nil {
-			logger.Error().Msgf("%v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("error"))
-			return
-		}
-
-		w.Write([]byte("ok"))
+		fn(w, r)
 	})))
 
 	return &http.Server{
-		Addr:    ":" + port,
+		Addr:    fmt.Sprintf("%s:%s", hostAddr, port),
 		Handler: mux,
 	}
 }

@@ -16,7 +16,8 @@ import (
 )
 
 var (
-	disableAuthFlag = flag.Bool("disable-auth", false, "disable Verifying requests from Slack")
+	disableAuthFlag  = flag.Bool("disable-auth", false, "disable Verifying requests from Slack")
+	localForwardFlag = flag.Bool("local-forward", false, "grpc connection to localhost")
 )
 
 func main() {
@@ -24,10 +25,10 @@ func main() {
 
 	logger := zerolog.New(os.Stdout)
 
-	srv := sdk.RegisterDefaultHTTPServer(Run)
+	srv := sdk.RegisterDefaultHTTPServer(RunWrapper)
 	go func() {
-		if err := srv.ListenAndServe(); err != nil {
-			logger.Error().Msgf("failed to ListenAndServe : %v", err)
+		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+			logger.Error().Msgf("server closed with error : %v", err)
 		}
 	}()
 
@@ -37,7 +38,7 @@ func main() {
 	<-sigCh
 	logger.Info().Msg("recive SIGTERM or SIGINT")
 
-	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error().Msgf("failed to shutdown HTTP Server : %v", err)
@@ -46,16 +47,23 @@ func main() {
 	logger.Info().Msg("HTTP Server shutdowned")
 }
 
-func Run(w http.ResponseWriter, r *http.Request) error {
+func RunWrapper(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logger := log.Ctx(r.Context())
 
-	body, err := broker.Auth(ctx, logger, r, *disableAuthFlag)
+	if err := Run(ctx, w, r, logger); err != nil {
+		logger.Error().Msgf("%v", err)
+		return
+	}
+}
+
+func Run(ctx context.Context, w http.ResponseWriter, r *http.Request, l *zerolog.Logger) error {
+	body, err := broker.Auth(ctx, l, r, *disableAuthFlag)
 	if err != nil {
 		return err
 	}
 
-	if err := broker.Proxy(ctx, logger, w, body); err != nil {
+	if err := broker.Proxy(ctx, l, w, body, *localForwardFlag); err != nil {
 		return err
 	}
 
