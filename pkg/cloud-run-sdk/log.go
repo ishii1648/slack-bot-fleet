@@ -19,7 +19,7 @@ var (
 	// CallerSkipFrameCount is the number of stack frames to skip to find the caller.
 	CallerSkipFrameCount = 3
 
-	projectID          string
+	ProjectID          string
 	sourceLocationHook = &callerHook{}
 	// For trace header, see https://cloud.google.com/trace/docs/troubleshooting#force-trace
 	traceHeaderRegExp = regexp.MustCompile(`^\s*([0-9a-fA-F]+)(?:/(\d+))?(?:;o=[01])?\s*$`)
@@ -36,9 +36,9 @@ func init() {
 		if err != nil {
 			log.Fatalf("Failed to fetch mandatory project ID: %v", err)
 		}
-		projectID = id
+		ProjectID = id
 	} else {
-		projectID = fetchProjectIDFromEnv()
+		ProjectID = fetchProjectIDFromEnv()
 	}
 }
 
