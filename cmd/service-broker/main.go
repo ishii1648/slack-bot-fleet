@@ -25,7 +25,7 @@ func main() {
 
 	logger := zerolog.New(os.Stdout)
 
-	srv := sdk.RegisterDefaultHTTPServer(RunWrapper)
+	srv := sdk.RegisterDefaultHTTPServer(Run)
 	go func() {
 		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 			logger.Error().Msgf("server closed with error : %v", err)
@@ -47,25 +47,12 @@ func main() {
 	logger.Info().Msg("HTTP Server shutdowned")
 }
 
-func RunWrapper(w http.ResponseWriter, r *http.Request) {
+func Run(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logger := log.Ctx(r.Context())
 
-	if err := Run(ctx, w, r, logger); err != nil {
+	if err := broker.Run(ctx, w, r, logger, *disableAuthFlag, *localForwardFlag); err != nil {
 		logger.Error().Msgf("%v", err)
 		return
 	}
-}
-
-func Run(ctx context.Context, w http.ResponseWriter, r *http.Request, l *zerolog.Logger) error {
-	body, err := broker.Auth(ctx, l, r, *disableAuthFlag)
-	if err != nil {
-		return err
-	}
-
-	if err := broker.Proxy(ctx, l, w, body, *localForwardFlag); err != nil {
-		return err
-	}
-
-	return nil
 }
