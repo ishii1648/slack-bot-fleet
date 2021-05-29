@@ -16,20 +16,25 @@ docker-push-service-broker:
 deploy-service-broker: docker-push-service-broker
 	bash ./deploy.sh service-broker
 
-## chatbot
+## example
 
-.PHONY: build-chatbot
-buid-chatbot:
-	go build ./cmd/chatbot
+.PHONY: build-example
+build-example:
+	go build -o ./bin/example ./cmd/example
 
-.PHONY: docker-push-chatbot
-docker-push-chatbot:
-	docker build -t asia.gcr.io/$(GOOGLE_CLOUD_PROJECT)/chatbot:latest . -f cmd/chatbot/Dockerfile
-	docker push asia.gcr.io/$(GOOGLE_CLOUD_PROJECT)/chatbot:latest
+.PHONY: docker-push-example
+docker-push-example:
+	docker build -t asia.gcr.io/$(GOOGLE_CLOUD_PROJECT)/example:latest . -f cmd/example/Dockerfile
+	docker push asia.gcr.io/$(GOOGLE_CLOUD_PROJECT)/example:latest
 
-.PHONY: deploy-chatbot
-deploy-chatbot: docker-push-chatbot
-	bash ./deploy.sh chatbot
+.PHONY: deploy-example
+deploy-example: docker-push-example
+	bash ./deploy.sh example
+
+## test
+.PHONY: test
+test:
+	go test -v ./service/...
 
 ## gen proto
 
@@ -39,3 +44,12 @@ go-proto:
 		--go_out=api/services/example/ --go_opt=paths=source_relative \
 		--go-grpc_out=api/services/example/ --go-grpc_opt=paths=source_relative \
 		api/services/example/*.proto
+
+## run
+.PHONY: run-service-broker
+run-service-broker:
+	go run ./cmd/service-broker/main.go -disable-auth
+
+.PHONY: run example
+run-example:
+	go run ./cmd/example/main.go
