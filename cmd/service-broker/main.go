@@ -18,14 +18,15 @@ import (
 var (
 	disableAuthFlag  = flag.Bool("disable-auth", false, "disable Verifying requests from Slack")
 	localForwardFlag = flag.Bool("local-forward", false, "grpc connection to localhost")
+	debugFlag        = flag.Bool("debug", false, "debug mode")
 )
 
 func main() {
 	flag.Parse()
 
-	logger := zerolog.New(os.Stdout)
+	logger := sdk.SetLogger(zerolog.New(os.Stdout))
 
-	srv := sdk.RegisterDefaultHTTPServer(Run)
+	srv := sdk.RegisterDefaultHTTPServer(Run, sdk.InjectLogger(logger, *debugFlag), InjectVerifyingSlackRequest())
 	go func() {
 		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 			logger.Error().Msgf("server closed with error : %v", err)
@@ -47,11 +48,32 @@ func main() {
 	logger.Info().Msg("HTTP Server shutdowned")
 }
 
+func InjectVerifyingSlackRequest() sdk.Adapter {
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			logger := log.Ctx(r.Context())
+
+			if !*disableAuthFlag {
+				if err := broker.VerifySlackRequest(logger, r); err != nil {
+					logger.Error().Msgf("invalid request : %v", err)
+					return
+				}
+				logger.Debug().Msg("success to verify slack request")
+			} else {
+				logger.Warn().Msg("skip to verify slack request")
+			}
+
+			h.ServeHTTP(w, r)
+		})
+
+	}
+}
+
 func Run(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logger := log.Ctx(r.Context())
 
-	if err := broker.Run(ctx, w, r, logger, *disableAuthFlag, *localForwardFlag); err != nil {
+	if err := broker.Proxy(ctx, w, r, *localForwardFlag); err != nil {
 		logger.Error().Msgf("%v", err)
 		return
 	}

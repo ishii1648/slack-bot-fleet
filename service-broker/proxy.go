@@ -4,14 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/ioutil"
 	"net/http"
 
 	"github.com/ishii1648/slack-bot-fleet/pkg/service"
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/slack-go/slack/slackevents"
 )
 
-func Proxy(ctx context.Context, l *zerolog.Logger, w http.ResponseWriter, body []byte, localForwardFlag bool) error {
+func Proxy(ctx context.Context, w http.ResponseWriter, r *http.Request, localForwardFlag bool) error {
+	logger := log.Ctx(r.Context())
+
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
+
 	eventsAPIEvent, err := slackevents.ParseEvent(json.RawMessage(body), slackevents.OptionNoVerifyToken())
 	if err != nil {
 		return err
@@ -23,7 +32,7 @@ func Proxy(ctx context.Context, l *zerolog.Logger, w http.ResponseWriter, body [
 			return err
 		}
 	case slackevents.CallbackEvent:
-		if err := proxyWithEvent(ctx, l, w, eventsAPIEvent, localForwardFlag); err != nil {
+		if err := proxyWithEvent(ctx, logger, w, eventsAPIEvent, localForwardFlag); err != nil {
 			return err
 		}
 		return nil
