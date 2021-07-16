@@ -7,11 +7,12 @@
     - "development"
   reactions:
     - "ok_hand"
----
 - service_name: test02
-  type: event_callback
-  event_users:
-    - s_ishii
-    - federer
-  event_channels:
-    - "development"
+  type: reaction_added
+  users:
+    - m_taro
+  item_channels:
+    - "sample"
+  reactions:
+    - "ok_hand"
+---

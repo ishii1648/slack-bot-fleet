@@ -5,7 +5,7 @@
 ## service-broker
 
 ```
-curl -XPOST -H "Content-Type: application/json" -H "X-Slack-Signature:0123456789abcdef" -H "X-Slack-Request-Timestamp:$(date +%s)" -d @- localhost:8080 <<EOF
+curl --dump-header - -XPOST -H "Content-Type: application/json" -H "X-Slack-Signature:0123456789abcdef" -H "X-Slack-Request-Timestamp:$(date +%s)" -d @- localhost:8080 <<EOF
 {
     "type": "event_callback",
     "event": {
@@ -27,12 +27,12 @@ EOF
 ## example
 
 ```
-grpcurl -plaintext -d @ localhost:8080 example.Example.Reply <<EOM
+grpcurl -plaintext -d @ localhost:8081 example.Example.Reply <<EOM
 {
     "reaction": "reaction_added",
-    "user": "U020VK32D63",
+    "user": "s_ishii",
     "item": {
-        "channel": "C0213JYV3HC",
+        "channel": "development",
         "ts": "1620581892.006600"
     }
 }

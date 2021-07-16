@@ -34,21 +34,25 @@ deploy-example: docker-push-example
 ## test
 .PHONY: test
 test:
-	go test -v ./service/...
+	go test -v --race ./service-broker/
+	go test -v --race ./pkg/event/
 
 ## gen proto
 
 .PHONY: go-proto
 go-proto:
-	protoc -I api/services/example/ \
-		--go_out=api/services/example/ --go_opt=paths=source_relative \
-		--go-grpc_out=api/services/example/ --go-grpc_opt=paths=source_relative \
-		api/services/example/*.proto
+	protoc -I proto/reaction-added-event/ \
+		--go_out=proto/reaction-added-event/ --go_opt=paths=source_relative \
+		--go-grpc_out=proto/reaction-added-event/ --go-grpc_opt=paths=source_relative \
+		proto/reaction-added-event/*.proto
 
 ## run
+.PHONY: run
+run: run-service-broker
+
 .PHONY: run-service-broker
 run-service-broker:
-	go run ./cmd/service-broker/main.go -disable-auth
+	go run ./cmd/service-broker/main.go -disable-auth -debug
 
 .PHONY: run example
 run-example:

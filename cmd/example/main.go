@@ -1,46 +1,78 @@
 package main
 
 import (
-	"context"
+	"fmt"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 
-	pb "github.com/ishii1648/slack-bot-fleet/api/services/chatbot"
-	// "github.com/ishii1648/slack-bot-fleet/pkg/crzerolog"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_zap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
+	grpc_ctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
+	pb "github.com/ishii1648/slack-bot-fleet/api/services/example"
+	"github.com/ishii1648/slack-bot-fleet/example"
+	sdk "github.com/ishii1648/slack-bot-fleet/pkg/cloud-run-sdk"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
 
-type server struct {
-	pb.UnimplementedChatbotServer
-}
-
-func (s *server) Reply(ctx context.Context, r *pb.Request) (*pb.Result, error) {
-	l := log.Ctx(ctx)
-	l.Info().Msgf("revice request : %v", r)
-	return &pb.Result{Message: "hello"}, nil
-}
-
 func main() {
-	port := "8080"
-	if fromEnv := os.Getenv("PORT"); fromEnv != "" {
-		port = fromEnv
-	}
+	logger := sdk.SetLogger(zerolog.New(os.Stdout))
 
-	l, err := net.Listen("tcp", ":"+port)
+	srv, listener, err := RegisterDefaultGRPCServer(logger)
 	if err != nil {
-		log.Fatal().Msgf("Failed to listen: %v", err)
+		logger.Fatal().Msgf("failed to RegisterDefaultGRPCServer : %v", err)
 	}
 
-	rootLogger := zerolog.New(os.Stdout)
+	go func() {
+		if err := srv.Serve(listener); err != nil {
+			logger.Error().Msgf("server closed with error : %v", err)
+		}
+	}()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+
+	<-sigCh
+	logger.Info().Msg("recive SIGTERM or SIGINT")
+
+	srv.GracefulStop()
+	logger.Info().Msg("gRPC Server shutdowned")
+}
+
+func RegisterDefaultGRPCServer(logger zerolog.Logger) (*grpc.Server, net.Listener, error) {
+	hostAddr := "0.0.0.0"
+	if h := os.Getenv("HOST_ADDR"); h != "" {
+		hostAddr = h
+	}
+
+	l, err := net.Listen("tcp", fmt.Sprintf("%s:%s", hostAddr, sdk.GetGRPCPort()))
+	if err != nil {
+		return nil, nil, err
+	}
+	var zapLogger *zap.Logger
+	var customFunc grpc_zap.CodeToLevel
+
+	opts := []grpc_zap.Option{
+		grpc_zap.WithLevels(customFunc),
+	}
+	// Make sure that log statements internal to gRPC library are logged using the zapLogger as well.
+	// grpc_zap.ReplaceGrpcLoggerV2(zapLogger)
+
+	// s := grpc.NewServer(
+	// 	grpc.UnaryInterceptor(sdk.LoggerInterceptor(&logger)),
+	// )
 	s := grpc.NewServer(
-		grpc.UnaryInterceptor(crzerolog.InjectLoggerInterceptor(&rootLogger)),
+		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
+			grpc_ctxtags.UnaryServerInterceptor(grpc_ctxtags.WithFieldExtractor(grpc_ctxtags.CodeGenRequestFieldExtractor)),
+			grpc_zap.UnaryServerInterceptor(zapLogger, opts...),
+		)),
 	)
 	reflection.Register(s)
-	pb.RegisterChatbotServer(s, &server{})
-	if err := s.Serve(l); err != nil {
-		log.Fatal().Msgf("Failed to serve: %v", err)
-	}
+	pb.RegisterExampleServer(s, &example.Server{})
+
+	return s, l, nil
 }
