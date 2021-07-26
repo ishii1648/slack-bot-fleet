@@ -10,14 +10,13 @@ import (
 
 	"github.com/ishii1648/cloud-run-sdk/http"
 	"github.com/ishii1648/cloud-run-sdk/logging/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/slack-go/slack"
 )
 
 func InjectVerifyingSlackRequest(disableAuth bool) http.Middleware {
 	return func(h pkghttp.Handler) pkghttp.Handler {
 		return pkghttp.HandlerFunc(func(w pkghttp.ResponseWriter, r *pkghttp.Request) {
-			logger := zerolog.NewLogger(log.Ctx(r.Context()))
+			logger := zerolog.Ctx(r.Context())
 
 			body, err := VerifySlackRequest(r, disableAuth)
 			if err != nil {
@@ -33,7 +32,7 @@ func InjectVerifyingSlackRequest(disableAuth bool) http.Middleware {
 
 // see. https://api.slack.com/authentication/verifying-requests-from-slack
 func VerifySlackRequest(r *pkghttp.Request, disableAuth bool) ([]byte, error) {
-	logger := zerolog.NewLogger(log.Ctx(r.Context()))
+	logger := zerolog.Ctx(r.Context())
 
 	slackSigningSecret, isSet := os.LookupEnv("SLACK_SIGNING_SECRET")
 	if !isSet {

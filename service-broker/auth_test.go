@@ -29,10 +29,7 @@ func TestInjectVerifyingSlackRequest(t *testing.T) {
 		return nil
 	}
 
-	handler, err := http.BindHandlerWithLogger(&rootLogger, run, InjectVerifyingSlackRequest(true))
-	if err != nil {
-		t.Fatal(err)
-	}
+	handler := http.Chain(run, http.InjectLogger(rootLogger, "google-sample-project"), InjectVerifyingSlackRequest(true))
 
 	var requestFunc = func(jsonBody string) *pkghttp.Request {
 		r := httptest.NewRequest("POST", "/", strings.NewReader(jsonBody))

@@ -1,5 +1,5 @@
 .PHONY: build
-build: build-service-broker
+build: build-service-broker build-example
 
 ## service-broker
 
@@ -36,6 +36,7 @@ deploy-example: docker-push-example
 test:
 	go test -v --race ./service-broker/
 	go test -v --race ./pkg/event/
+	go test -v --race ./example/
 
 ## gen proto
 
@@ -56,4 +57,4 @@ run-service-broker:
 
 .PHONY: run example
 run-example:
-	go run ./cmd/example/main.go
+	go run ./cmd/example/main.go -debug

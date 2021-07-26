@@ -27,7 +27,7 @@ EOF
 ## example
 
 ```
-grpcurl -plaintext -d @ localhost:8081 example.Example.Reply <<EOM
+grpcurl -plaintext -d @ localhost:8081 reaction.Reaction.Run <<EOM
 {
     "reaction": "reaction_added",
     "user": "s_ishii",

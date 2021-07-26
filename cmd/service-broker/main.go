@@ -3,12 +3,12 @@ package main
 import (
 	"flag"
 	pkghttp "net/http"
+	"os"
 
 	"github.com/ishii1648/cloud-run-sdk/http"
 	"github.com/ishii1648/cloud-run-sdk/logging/zerolog"
 	"github.com/ishii1648/cloud-run-sdk/util"
 	broker "github.com/ishii1648/slack-bot-fleet/service-broker"
-	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -21,12 +21,16 @@ func main() {
 
 	rootLogger := zerolog.SetDefaultLogger(*debugFlag)
 
-	handler, err := http.BindHandlerWithLogger(&rootLogger, http.AppHandler(Run), broker.InjectVerifyingSlackRequest(*disableAuthFlag))
+	projectID, err := util.FetchProjectID()
 	if err != nil {
-		log.Fatal().Msg(err.Error())
+		rootLogger.Errorf("failed to fetch project ID : %v", err)
+		os.Exit(1)
 	}
 
-	http.StartHTTPServer("/", handler, util.SetupSignalHandler())
+	server := http.NewServerWithLogger(rootLogger, projectID)
+
+	server.HandleWithRoot(http.AppHandler(Run), broker.InjectVerifyingSlackRequest(*disableAuthFlag))
+	server.Start(util.SetupSignalHandler())
 }
 
 func Run(w pkghttp.ResponseWriter, r *pkghttp.Request) *http.Error {

@@ -2,49 +2,18 @@ package example
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"os"
 
-	pb "github.com/ishii1648/slack-bot-fleet/api/services/example"
-	"github.com/ishii1648/slack-bot-fleet/pkg/service"
-	"github.com/slack-go/slack"
-
-	// "github.com/ishii1648/slack-bot-fleet/pkg/slack"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	"github.com/ishii1648/cloud-run-sdk/logging/zerolog"
+	pb "github.com/ishii1648/slack-bot-fleet/proto/reaction-added-event"
 )
 
 type Server struct {
-	l *zerolog.Logger
-	s *slack.Client
-	pb.UnimplementedExampleServer
+	pb.UnimplementedReactionServer
 }
 
-func (s *Server) Reply(ctx context.Context, r *pb.Request) (*pb.Result, error) {
-	s.l = log.Ctx(ctx)
-	s.l.Info().Msgf("revice request : %v", r)
+func (s *Server) Run(ctx context.Context, r *pb.Request) (*pb.Result, error) {
+	logger := zerolog.Ctx(ctx)
+	logger.Debugf("revice request (reaction=%s, user=%s, item={%v})", r.Reaction, r.User, r.Item)
 
-	s.s = slack.New(os.Getenv("SLACK_BOT_TOKEN"))
-
-	if err := s.verifyRequest(r.User, r.Item.Channel, r.Reaction); err != nil {
-		return nil, fmt.Errorf("failed to verify : %v", err)
-	}
-
-	return &pb.Result{Message: "hello"}, nil
-}
-
-func (s *Server) verifyRequest(userRealName, channelName, reaction string) error {
-	criteriaList, err := service.ParseReactionEventCriteriaListYml("./criteria.yml")
-	if err != nil {
-		return err
-	}
-
-	for _, criteria := range criteriaList {
-		if ok := criteria.Match(userRealName, reaction, channelName); ok {
-			return nil
-		}
-	}
-
-	return errors.New("no match service")
+	return &pb.Result{Message: "ok"}, nil
 }

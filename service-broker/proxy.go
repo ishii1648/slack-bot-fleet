@@ -12,12 +12,13 @@ import (
 	"github.com/ishii1648/cloud-run-sdk/logging/zerolog"
 	eventItem "github.com/ishii1648/slack-bot-fleet/pkg/event"
 	pb "github.com/ishii1648/slack-bot-fleet/proto/reaction-added-event"
-	"github.com/rs/zerolog/log"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 )
 
 func Run(w pkghttp.ResponseWriter, r *pkghttp.Request) *http.Error {
+	logger := zerolog.Ctx(r.Context())
+
 	body, ok := r.Context().Value("requestBody").([]byte)
 	if !ok {
 		return &http.Error{
@@ -35,8 +36,6 @@ func Run(w pkghttp.ResponseWriter, r *pkghttp.Request) *http.Error {
 			Code:    pkghttp.StatusBadRequest,
 		}
 	}
-
-	logger := zerolog.NewLogger(log.Ctx(r.Context()))
 
 	switch eventsAPIEvent.Type {
 	case slackevents.URLVerification:
@@ -126,54 +125,53 @@ func (e *ReactionAddedEvent) run(ctx context.Context) error {
 		return err
 	}
 
-	matchedItem, err := e.getMatchedItem(e.slack, items)
+	item, req, err := e.getMatchedItem(e.slack, items)
 	if err != nil {
 		return err
 	}
 
-	serviceAddr, isLocalhost, err := matchedItem.GetServiceAddr(ctx)
+	serviceAddr, isLocalhost, err := item.GetServiceAddr(ctx)
 	if err != nil {
 		return err
 	}
-	e.logger.Debugf("get service address : %s", serviceAddr)
+	e.logger.Debugf("get destination service address : %s", serviceAddr)
 
-	if err := e.SendRequest(ctx, serviceAddr, isLocalhost); err != nil {
+	if err := e.SendRequest(ctx, req, serviceAddr, isLocalhost); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (e *ReactionAddedEvent) getMatchedItem(s *slack.Client, items []eventItem.ReactionAddedItem) (*eventItem.ReactionAddedItem, error) {
+func (e *ReactionAddedEvent) getMatchedItem(s *slack.Client, items []eventItem.ReactionAddedItem) (*eventItem.ReactionAddedItem, *pb.Request, error) {
 	for _, item := range items {
 		user, err := s.GetUserInfo(e.event.User)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		channel, err := s.GetConversationInfo(e.event.Item.Channel, false)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		if ok := item.Match(user.RealName, e.event.Reaction, channel.Name); ok {
-			return &item, nil
+			req := &pb.Request{
+				Reaction: e.event.Reaction,
+				User:     user.RealName,
+				Item: &pb.EventItem{
+					Channel: channel.Name,
+					Ts:      e.event.Item.Timestamp,
+				},
+			}
+			return &item, req, nil
 		}
 	}
 
-	return nil, errors.New("no matched item")
+	return nil, nil, errors.New("no matched item")
 }
 
-func (e *ReactionAddedEvent) SendRequest(ctx context.Context, serviceAddr string, isLocalhost bool) error {
-	r := &pb.Request{
-		Reaction: e.event.Reaction,
-		User:     e.event.User,
-		Item: &pb.EventItem{
-			Channel: e.event.Item.Channel,
-			Ts:      e.event.Item.Timestamp,
-		},
-	}
-
+func (e *ReactionAddedEvent) SendRequest(ctx context.Context, req *pb.Request, serviceAddr string, isLocalhost bool) error {
 	conn, err := grpc.NewConn(serviceAddr, isLocalhost)
 	if err != nil {
 		return err
@@ -181,9 +179,11 @@ func (e *ReactionAddedEvent) SendRequest(ctx context.Context, serviceAddr string
 
 	c := pb.NewReactionClient(conn)
 
-	if _, err := c.Run(ctx, r); err != nil {
+	resp, err := c.Run(ctx, req)
+	if err != nil {
 		return err
 	}
+	e.logger.Infof("received message from %s : %s", serviceAddr, resp.Message)
 
 	return nil
 }
