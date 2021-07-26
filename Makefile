@@ -1,12 +1,11 @@
 .PHONY: build
-build:
-	go build ./cmd/service-broker
+build: build-service-broker build-example
 
 ## service-broker
 
 .PHONY: build-service-broker
-buid-service-broker:
-	go build ./cmd/service-broker
+build-service-broker:
+	go build  -o ./bin/service-broker ./cmd/service-broker
 
 .PHONY: docker-push-service-broker
 docker-push-service-broker:
@@ -17,26 +16,47 @@ docker-push-service-broker:
 deploy-service-broker: docker-push-service-broker
 	bash ./deploy.sh service-broker
 
-## chatbot
+## example
 
-.PHONY: build-chatbot
-buid-chatbot:
-	go build ./cmd/chatbot
+.PHONY: build-example
+build-example:
+	go build -o ./bin/example ./cmd/example
 
-.PHONY: docker-push-chatbot
-docker-push-chatbot:
-	docker build -t asia.gcr.io/$(GOOGLE_CLOUD_PROJECT)/chatbot:latest . -f cmd/chatbot/Dockerfile
-	docker push asia.gcr.io/$(GOOGLE_CLOUD_PROJECT)/chatbot:latest
+.PHONY: docker-push-example
+docker-push-example:
+	docker build -t asia.gcr.io/$(GOOGLE_CLOUD_PROJECT)/example:latest . -f cmd/example/Dockerfile
+	docker push asia.gcr.io/$(GOOGLE_CLOUD_PROJECT)/example:latest
 
-.PHONY: deploy-chatbot
-deploy-chatbot: docker-push-chatbot
-	bash ./deploy.sh chatbot
+.PHONY: deploy-example
+deploy-example: docker-push-example
+	bash ./deploy.sh example
+
+## test
+.PHONY: test
+test:
+	bash ./test.sh
+
+.PHONY: test-coverage
+test-coverage:
+	bash ./test.sh -coverage
 
 ## gen proto
 
 .PHONY: go-proto
 go-proto:
-	protoc -I api/services/chatbot/ \
-		--go_out=api/services/chatbot/ --go_opt=paths=source_relative \
-		--go-grpc_out=api/services/chatbot/ --go-grpc_opt=paths=source_relative \
-		api/services/chatbot/*.proto
+	protoc -I proto/reaction-added-event/ \
+		--go_out=proto/reaction-added-event/ --go_opt=paths=source_relative \
+		--go-grpc_out=proto/reaction-added-event/ --go-grpc_opt=paths=source_relative \
+		proto/reaction-added-event/*.proto
+
+## run
+.PHONY: run
+run: run-service-broker
+
+.PHONY: run-service-broker
+run-service-broker:
+	go run ./cmd/service-broker/main.go -disable-auth -debug
+
+.PHONY: run example
+run-example:
+	go run ./cmd/example/main.go -debug
