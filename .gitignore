@@ -1,6 +1,3 @@
-# /service-broker
-# /chatbot
 /bin/*
-
-
+coverage.txt
 go.sum

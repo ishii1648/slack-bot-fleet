@@ -34,9 +34,11 @@ deploy-example: docker-push-example
 ## test
 .PHONY: test
 test:
-	go test -v --race ./service-broker/
-	go test -v --race ./pkg/event/
-	go test -v --race ./example/
+	bash ./test.sh
+
+.PHONY: test-coverage
+test-coverage:
+	bash ./test.sh -coverage
 
 ## gen proto
 

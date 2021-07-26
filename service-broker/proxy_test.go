@@ -1,10 +1,11 @@
 package broker
 
 import (
-	"github.com/ishii1648/cloud-run-sdk/logging/zerolog"
-	"github.com/rs/zerolog/log"
-	"net/http/httptest"
+	"bytes"
 	"testing"
+
+	"github.com/ishii1648/cloud-run-sdk/logging/zerolog"
+	"net/http/httptest"
 )
 
 func TestResponseURLVerification(t *testing.T) {
@@ -15,9 +16,10 @@ func TestResponseURLVerification(t *testing.T) {
 		"type": "url_verification"
 	}`
 
-	logger := zerolog.NewLogger(&log.Logger)
+	buf := &bytes.Buffer{}
+	rootLogger := zerolog.SetLogger(buf, true, false)
 
-	if err := responseURLVerification(logger, resprec, []byte(body)); err != nil {
+	if err := responseURLVerification(rootLogger, resprec, []byte(body)); err != nil {
 		t.Fatal(err)
 	}
 
