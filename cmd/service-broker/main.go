@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	pkghttp "net/http"
 	"os"
 
 	"github.com/ishii1648/cloud-run-sdk/http"
@@ -29,14 +28,6 @@ func main() {
 
 	server := http.NewServerWithLogger(rootLogger, projectID)
 
-	server.HandleWithRoot(http.AppHandler(Run), broker.InjectVerifyingSlackRequest(*disableAuthFlag))
+	server.HandleWithRoot(http.AppHandler(broker.Run), broker.InjectVerifyingSlackRequest(*disableAuthFlag))
 	server.Start(util.SetupSignalHandler())
-}
-
-func Run(w pkghttp.ResponseWriter, r *pkghttp.Request) *http.Error {
-	if err := broker.Run(w, r); err != nil {
-		return err
-	}
-
-	return nil
 }
