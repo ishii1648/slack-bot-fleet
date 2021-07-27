@@ -62,7 +62,12 @@ func (i *ReactionAddedItem) GetServiceAddr(ctx context.Context) (addr string, is
 			return addr, isLocalhost, err
 		}
 
-		url, err = util.FetchURLByServiceName(ctx, i.ServiceName, "asia-east1", projectID)
+		location, isSet := os.LookupEnv("CLOUD_RUN_LOCATION")
+		if !isSet {
+			location = "asia-northeast1"
+		}
+
+		url, err = util.FetchURLByServiceName(ctx, i.ServiceName, location, projectID)
 		if err != nil {
 			return addr, isLocalhost, err
 		}
