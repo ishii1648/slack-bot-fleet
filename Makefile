@@ -24,7 +24,7 @@ build-example:
 
 .PHONY: docker-push-example
 docker-push-example:
-	docker build -t asia.gcr.io/$(GOOGLE_CLOUD_PROJECT)/example:latest . -f cmd/example/Dockerfile
+	docker build -t asia.gcr.io/$(GOOGLE_CLOUD_PROJECT)/example:latest . -f Dockerfile-example
 	docker push asia.gcr.io/$(GOOGLE_CLOUD_PROJECT)/example:latest
 
 .PHONY: deploy-example

@@ -11,28 +11,33 @@ import (
 	"github.com/ishii1648/cloud-run-sdk/http"
 	"github.com/ishii1648/cloud-run-sdk/logging/zerolog"
 	"github.com/slack-go/slack"
+	"go.opencensus.io/trace"
 )
 
 func InjectVerifyingSlackRequest(disableAuth bool) http.Middleware {
 	return func(h pkghttp.Handler) pkghttp.Handler {
 		return pkghttp.HandlerFunc(func(w pkghttp.ResponseWriter, r *pkghttp.Request) {
-			logger := zerolog.Ctx(r.Context())
+			ctx := r.Context()
+			logger := zerolog.Ctx(ctx)
 
-			body, err := VerifySlackRequest(r, disableAuth)
+			body, err := VerifySlackRequest(ctx, r, disableAuth)
 			if err != nil {
 				logger.Errorf("invalid request : %v", err)
 				pkghttp.Error(w, "invalid request", pkghttp.StatusBadRequest)
 				return
 			}
 
-			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), "requestBody", body)))
+			h.ServeHTTP(w, r.WithContext(context.WithValue(ctx, "requestBody", body)))
 		})
 	}
 }
 
 // see. https://api.slack.com/authentication/verifying-requests-from-slack
-func VerifySlackRequest(r *pkghttp.Request, disableAuth bool) ([]byte, error) {
-	logger := zerolog.Ctx(r.Context())
+func VerifySlackRequest(ctx context.Context, r *pkghttp.Request, disableAuth bool) ([]byte, error) {
+	sc := trace.FromContext(ctx).SpanContext()
+	_, span := trace.StartSpanWithRemoteParent(ctx, "VerifySlackRequest", sc)
+	defer span.End()
+	logger := zerolog.Ctx(ctx)
 
 	slackSigningSecret, isSet := os.LookupEnv("SLACK_SIGNING_SECRET")
 	if !isSet {

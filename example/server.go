@@ -13,7 +13,7 @@ type Server struct {
 
 func (s *Server) Run(ctx context.Context, r *pb.Request) (*pb.Result, error) {
 	logger := zerolog.Ctx(ctx)
-	logger.Debugf("revice request (reaction=%s, user=%s, item={%v})", r.Reaction, r.User, r.Item)
+	logger.Infof("revice request (reaction=%s, user=%s, item={%v})", r.Reaction, r.User, r.Item)
 
 	return &pb.Result{Message: "ok"}, nil
 }
