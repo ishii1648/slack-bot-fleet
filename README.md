@@ -7,7 +7,11 @@
 ### service-broker
 
 ```
-curl --dump-header - -XPOST -H "Content-Type: application/json" -H "X-Slack-Signature:0123456789abcdef" -H "X-Slack-Request-Timestamp:$(date +%s)" -d @- localhost:8080 <<EOF
+curl --dump-header - -XPOST \
+-H "Content-Type: application/json" \
+-H "X-Slack-Signature:0123456789abcdef" \
+-H "X-Cloud-Trace-Context:0123456789abcdef0123456789abcdef/123;o=1" \
+-H "X-Slack-Request-Timestamp:$(date +%s)" -d @- localhost:8080 <<EOF
 {
     "type": "event_callback",
     "event": {

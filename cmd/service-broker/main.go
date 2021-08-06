@@ -4,10 +4,14 @@ import (
 	"flag"
 	"os"
 
+	"contrib.go.opencensus.io/exporter/stackdriver"
+	"contrib.go.opencensus.io/exporter/stackdriver/propagation"
 	"github.com/ishii1648/cloud-run-sdk/http"
 	"github.com/ishii1648/cloud-run-sdk/logging/zerolog"
 	"github.com/ishii1648/cloud-run-sdk/util"
 	broker "github.com/ishii1648/slack-bot-fleet/service-broker"
+	"go.opencensus.io/plugin/ochttp"
+	"go.opencensus.io/trace"
 )
 
 var (
@@ -26,8 +30,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	if util.IsCloudRun() {
+		exporter, err := stackdriver.NewExporter(stackdriver.Options{
+			MetricPrefix: "service-broker",
+		})
+		if err != nil {
+			rootLogger.Errorf("failed to NewExporter : %v", err)
+			os.Exit(1)
+		}
+		trace.RegisterExporter(exporter)
+	}
+
 	server := http.NewServerWithLogger(rootLogger, projectID)
 
-	server.HandleWithRoot(http.AppHandler(broker.Run), broker.InjectVerifyingSlackRequest(*disableAuthFlag))
+	httpHandler := &ochttp.Handler{
+		Handler:     http.Chain(http.AppHandler(broker.Run), http.InjectLogger(rootLogger, projectID), broker.InjectVerifyingSlackRequest(*disableAuthFlag)),
+		Propagation: &propagation.HTTPFormat{},
+	}
+
+	server.Handle("/", httpHandler)
 	server.Start(util.SetupSignalHandler())
 }

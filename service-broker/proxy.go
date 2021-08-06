@@ -6,6 +6,7 @@ import (
 	"errors"
 	pkghttp "net/http"
 	"os"
+	"time"
 
 	"github.com/ishii1648/cloud-run-sdk/grpc"
 	"github.com/ishii1648/cloud-run-sdk/http"
@@ -14,6 +15,8 @@ import (
 	pb "github.com/ishii1648/slack-bot-fleet/proto/reaction-added-event"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
+	"go.opencensus.io/trace"
+	pkggrpc "google.golang.org/grpc"
 )
 
 func Run(w pkghttp.ResponseWriter, r *pkghttp.Request) *http.Error {
@@ -95,12 +98,23 @@ func proxy(ctx context.Context, logger *zerolog.Logger, eventsAPIEvent slackeven
 
 	switch event := eventsAPIEvent.InnerEvent.Data.(type) {
 	case *slackevents.ReactionAddedEvent:
-		logger.Infof("recieve ReactionAddedEvent(user : %s, channel: %s, reaction: %s)", event.User, event.Item.Channel, event.Reaction)
+		user, err := slackClient.GetUserInfoContext(ctx, event.User)
+		if err != nil {
+			return err
+		}
+
+		channel, err := slackClient.GetConversationInfoContext(ctx, event.Item.Channel, false)
+		if err != nil {
+			return err
+		}
+
+		logger.Infof("recieve ReactionAddedEvent(user : %s, channel: %s, reaction: %s)", user.RealName, channel.Name, event.Reaction)
 
 		e := &ReactionAddedEvent{
-			event:  event,
-			logger: logger,
-			slack:  slackClient,
+			userRealName: user.RealName,
+			channelName:  channel.Name,
+			event:        event,
+			logger:       logger,
 		}
 
 		if err := e.run(ctx); err != nil {
@@ -114,9 +128,10 @@ func proxy(ctx context.Context, logger *zerolog.Logger, eventsAPIEvent slackeven
 }
 
 type ReactionAddedEvent struct {
-	event  *slackevents.ReactionAddedEvent
-	logger *zerolog.Logger
-	slack  *slack.Client
+	userRealName string
+	channelName  string
+	event        *slackevents.ReactionAddedEvent
+	logger       *zerolog.Logger
 }
 
 func (e *ReactionAddedEvent) run(ctx context.Context) error {
@@ -125,12 +140,12 @@ func (e *ReactionAddedEvent) run(ctx context.Context) error {
 		return err
 	}
 
-	item, req, err := e.getMatchedItem(e.slack, items)
+	item, req, err := e.getMatchedItem(ctx, items)
 	if err != nil {
 		return err
 	}
 
-	serviceAddr, isLocalhost, err := item.GetServiceAddr(ctx)
+	serviceAddr, isLocalhost, err := item.FetchServiceAddr(ctx)
 	if err != nil {
 		return err
 	}
@@ -143,24 +158,18 @@ func (e *ReactionAddedEvent) run(ctx context.Context) error {
 	return nil
 }
 
-func (e *ReactionAddedEvent) getMatchedItem(s *slack.Client, items []eventItem.ReactionAddedItem) (*eventItem.ReactionAddedItem, *pb.Request, error) {
+func (e *ReactionAddedEvent) getMatchedItem(ctx context.Context, items []eventItem.ReactionAddedItem) (*eventItem.ReactionAddedItem, *pb.Request, error) {
+	sc := trace.FromContext(ctx).SpanContext()
+	_, span := trace.StartSpanWithRemoteParent(ctx, "ReactionAddedEvent.getMatchedItem", sc)
+	defer span.End()
+
 	for _, item := range items {
-		user, err := s.GetUserInfo(e.event.User)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		channel, err := s.GetConversationInfo(e.event.Item.Channel, false)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		if ok := item.Match(user.RealName, e.event.Reaction, channel.Name); ok {
+		if ok := item.Match(e.userRealName, e.event.Reaction, e.channelName); ok {
 			req := &pb.Request{
 				Reaction: e.event.Reaction,
-				User:     user.RealName,
+				User:     e.userRealName,
 				Item: &pb.EventItem{
-					Channel: channel.Name,
+					Channel: e.channelName,
 					Ts:      e.event.Item.Timestamp,
 				},
 			}
@@ -172,10 +181,20 @@ func (e *ReactionAddedEvent) getMatchedItem(s *slack.Client, items []eventItem.R
 }
 
 func (e *ReactionAddedEvent) SendRequest(ctx context.Context, req *pb.Request, serviceAddr string, isLocalhost bool) error {
-	conn, err := grpc.NewConn(serviceAddr, isLocalhost)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	var conn *pkggrpc.ClientConn
+	var err error
+	if isLocalhost {
+		conn, err = pkggrpc.DialContext(ctx, serviceAddr)
+	} else {
+		conn, err = grpc.NewTLSConn(ctx, serviceAddr, pkggrpc.WithUnaryInterceptor(grpc.TraceIDInterceptor))
+	}
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 
 	c := pb.NewReactionClient(conn)
 

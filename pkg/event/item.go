@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ishii1648/cloud-run-sdk/util"
+	"go.opencensus.io/trace"
 	"gopkg.in/yaml.v2"
 )
 
@@ -49,10 +50,14 @@ func (i *ReactionAddedItem) Match(userRealName, reaction, channelName string) bo
 	return true
 }
 
-func (i *ReactionAddedItem) GetServiceAddr(ctx context.Context) (addr string, isLocalhost bool, err error) {
+func (i *ReactionAddedItem) FetchServiceAddr(ctx context.Context) (addr string, isLocalhost bool, err error) {
+	sc := trace.FromContext(ctx).SpanContext()
+	_, span := trace.StartSpanWithRemoteParent(ctx, "ReactionAddedItem.FetchServiceAddr", sc)
+	defer span.End()
+
 	port, isSet := os.LookupEnv("GRPC_PORT")
 	if !isSet {
-		port = "8080"
+		port = "443"
 	}
 
 	if util.IsCloudRun() {
@@ -62,7 +67,12 @@ func (i *ReactionAddedItem) GetServiceAddr(ctx context.Context) (addr string, is
 			return addr, isLocalhost, err
 		}
 
-		url, err = util.FetchURLByServiceName(ctx, i.ServiceName, "asia-east1", projectID)
+		location, isSet := os.LookupEnv("CLOUD_RUN_LOCATION")
+		if !isSet {
+			location = "asia-northeast1"
+		}
+
+		url, err = util.FetchURLByServiceName(ctx, i.ServiceName, location, projectID)
 		if err != nil {
 			return addr, isLocalhost, err
 		}

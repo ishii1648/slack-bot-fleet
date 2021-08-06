@@ -8,9 +8,10 @@ RUN go mod download
 ARG CGO_ENABLED=0
 ARG GOOS=linux
 ARG GOARCH=amd64
-RUN go build ./cmd/example
+RUN go build -o ./bin/example ./cmd/example
 FROM alpine:3.12 as runner
 
-COPY --from=builder /go/src/example ./example
+COPY --from=builder /go/src/bin/example ./example
+COPY --from=builder /go/src/*.yaml ./
 
 ENTRYPOINT ["./example"]

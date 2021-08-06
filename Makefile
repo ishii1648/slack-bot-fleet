@@ -9,7 +9,7 @@ build-service-broker:
 
 .PHONY: docker-push-service-broker
 docker-push-service-broker:
-	docker build -t asia.gcr.io/$(GOOGLE_CLOUD_PROJECT)/service-broker:latest . -f cmd/service-broker/Dockerfile
+	docker build -t asia.gcr.io/$(GOOGLE_CLOUD_PROJECT)/service-broker:latest . -f Dockerfile-service-broker
 	docker push asia.gcr.io/$(GOOGLE_CLOUD_PROJECT)/service-broker:latest
 
 .PHONY: deploy-service-broker
@@ -24,7 +24,7 @@ build-example:
 
 .PHONY: docker-push-example
 docker-push-example:
-	docker build -t asia.gcr.io/$(GOOGLE_CLOUD_PROJECT)/example:latest . -f cmd/example/Dockerfile
+	docker build -t asia.gcr.io/$(GOOGLE_CLOUD_PROJECT)/example:latest . -f Dockerfile-example
 	docker push asia.gcr.io/$(GOOGLE_CLOUD_PROJECT)/example:latest
 
 .PHONY: deploy-example
