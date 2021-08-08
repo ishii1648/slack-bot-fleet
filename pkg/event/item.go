@@ -2,6 +2,7 @@ package event
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -29,6 +30,18 @@ func ParseReactionAddedItem(ymlPath string) ([]ReactionAddedItem, error) {
 
 	if err := yaml.Unmarshal(ymlFile, &items); err != nil {
 		return nil, err
+	}
+
+	for _, item := range items {
+		if len(item.Users) == 0 {
+			return nil, fmt.Errorf("no set users on %s", ymlPath)
+		}
+		if len(item.Reactions) == 0 {
+			return nil, fmt.Errorf("no set reactions on %s", ymlPath)
+		}
+		if len(item.ItemChannels) == 0 {
+			return nil, fmt.Errorf("no set item_channels on %s", ymlPath)
+		}
 	}
 
 	return items, nil

@@ -19,35 +19,24 @@ import (
 	pkggrpc "google.golang.org/grpc"
 )
 
-func Run(w pkghttp.ResponseWriter, r *pkghttp.Request) *http.Error {
-	logger := zerolog.Ctx(r.Context())
+func Run(w pkghttp.ResponseWriter, r *pkghttp.Request) *http.AppError {
+	ctx := r.Context()
+	logger := zerolog.Ctx(ctx)
 
-	body, ok := r.Context().Value("requestBody").([]byte)
+	body, ok := ctx.Value("requestBody").([]byte)
 	if !ok {
-		return &http.Error{
-			Error:   errors.New("requestBody not found"),
-			Message: "requestBody not found",
-			Code:    pkghttp.StatusBadRequest,
-		}
+		return http.Error(pkghttp.StatusBadRequest, "requestBody not found")
 	}
 
 	eventsAPIEvent, err := slackevents.ParseEvent(json.RawMessage(body), slackevents.OptionNoVerifyToken())
 	if err != nil {
-		return &http.Error{
-			Error:   err,
-			Message: "invalid request",
-			Code:    pkghttp.StatusBadRequest,
-		}
+		return http.Errorf(pkghttp.StatusBadRequest, "failed to parse event: %v", err)
 	}
 
 	switch eventsAPIEvent.Type {
 	case slackevents.URLVerification:
 		if err := responseURLVerification(logger, w, body); err != nil {
-			return &http.Error{
-				Error:   err,
-				Message: "failed to URLVerification",
-				Code:    pkghttp.StatusInternalServerError,
-			}
+			return http.Errorf(pkghttp.StatusInternalServerError, "failed to response URLVerification: %v", err)
 		}
 	case slackevents.CallbackEvent:
 		// We should response before request gRPC,
@@ -57,17 +46,12 @@ func Run(w pkghttp.ResponseWriter, r *pkghttp.Request) *http.Error {
 			return nil
 		}
 
-		if err := proxy(r.Context(), logger, eventsAPIEvent); err != nil {
+		if err := proxy(ctx, logger, eventsAPIEvent); err != nil {
+			// just log errer message
 			logger.Errorf("failed to proxy: %v", err)
 		}
-
-		return nil
 	case slackevents.AppRateLimited:
-		return &http.Error{
-			Error:   errors.New("app's event subscriptions are being rate limited"),
-			Message: "app's event subscriptions are being rate limited",
-			Code:    pkghttp.StatusBadRequest,
-		}
+		return http.Error(pkghttp.StatusBadRequest, "app's event subscriptions are being rate limited")
 	}
 
 	return nil
@@ -108,7 +92,7 @@ func proxy(ctx context.Context, logger *zerolog.Logger, eventsAPIEvent slackeven
 			return err
 		}
 
-		logger.Infof("recieve ReactionAddedEvent(user : %s, channel: %s, reaction: %s)", user.RealName, channel.Name, event.Reaction)
+		logger.Infof("recieved ReactionAddedEvent(user : %s, channel: %s, reaction: %s)", user.RealName, channel.Name, event.Reaction)
 
 		e := &ReactionAddedEvent{
 			userRealName: user.RealName,
@@ -187,7 +171,7 @@ func (e *ReactionAddedEvent) SendRequest(ctx context.Context, req *pb.Request, s
 	var conn *pkggrpc.ClientConn
 	var err error
 	if isLocalhost {
-		conn, err = pkggrpc.DialContext(ctx, serviceAddr)
+		conn, err = pkggrpc.DialContext(ctx, serviceAddr, pkggrpc.WithInsecure())
 	} else {
 		conn, err = grpc.NewTLSConn(ctx, serviceAddr, pkggrpc.WithUnaryInterceptor(grpc.TraceIDInterceptor))
 	}
