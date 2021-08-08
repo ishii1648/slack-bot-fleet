@@ -5,7 +5,7 @@ go 1.15
 require (
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.8
 	github.com/golang/protobuf v1.5.2
-	github.com/ishii1648/cloud-run-sdk v0.2.7
+	github.com/ishii1648/cloud-run-sdk v0.2.8
 	github.com/rs/zerolog v1.22.0
 	github.com/slack-go/slack v0.9.0
 	go.opencensus.io v0.23.0
