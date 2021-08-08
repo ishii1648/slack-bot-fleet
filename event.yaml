@@ -5,5 +5,5 @@
     - s_ishii
   item_channels:
     - "development"
-  reaction:
+  reactions:
     - "ok_hand"
