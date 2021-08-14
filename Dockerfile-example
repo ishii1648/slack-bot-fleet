@@ -12,6 +12,6 @@ RUN go build -o ./bin/example ./cmd/example
 FROM alpine:3.12 as runner
 
 COPY --from=builder /go/src/bin/example ./example
-COPY --from=builder /go/src/*.yaml ./
+COPY --from=builder /go/src/*.yml ./
 
 ENTRYPOINT ["./example"]
