@@ -30,7 +30,7 @@ func (e *AppError) Error() string {
 	return e.Message
 }
 
-type AppHandler func(context.Context) (string, *AppError)
+type AppHandler func(context.Context) ([]byte, *AppError)
 
 func (fn AppHandler) ServeHTTP(w pkghttp.ResponseWriter, r *pkghttp.Request) {
 	ctx := r.Context()
@@ -47,11 +47,11 @@ func (fn AppHandler) ServeHTTP(w pkghttp.ResponseWriter, r *pkghttp.Request) {
 		}
 	}
 
-	if res != "" {
-		res = "done"
+	if res == nil {
+		res = []byte("done")
 	}
 
-	if _, err := w.Write([]byte(res)); err != nil {
+	if _, err := w.Write(res); err != nil {
 		logger.Error(err)
 	}
 }

@@ -19,45 +19,45 @@ import (
 	taskspb "google.golang.org/genproto/googleapis/cloud/tasks/v2"
 )
 
-func Run(ctx context.Context) (string, *AppError) {
+func Run(ctx context.Context) ([]byte, *AppError) {
 	logger := zerolog.Ctx(ctx)
 
 	body, ok := ctx.Value("requestBody").([]byte)
 	if !ok {
-		return "", Error(pkghttp.StatusBadRequest, "requestBody not found")
+		return nil, Error(pkghttp.StatusBadRequest, "requestBody not found")
 	}
 
 	eventsAPIEvent, err := slackevents.ParseEvent(json.RawMessage(body), slackevents.OptionNoVerifyToken())
 	if err != nil {
-		return "", Errorf(pkghttp.StatusBadRequest, "failed to parse event: %v", err)
+		return nil, Errorf(pkghttp.StatusBadRequest, "failed to parse event: %v", err)
 	}
 
 	switch eventsAPIEvent.Type {
 	case slackevents.URLVerification:
-		challangeRes, err := responseURLVerification(logger, body)
+		challangeRes, err := responseURLVerification(body)
 		if err != nil {
-			return "", Errorf(pkghttp.StatusInternalServerError, "failed to response URLVerification: %v", err)
+			return nil, Errorf(pkghttp.StatusInternalServerError, "failed to response URLVerification: %v", err)
 		}
 		return challangeRes, nil
 	case slackevents.CallbackEvent:
 		if err := proxy(ctx, logger, eventsAPIEvent); err != nil {
-			return "", Error(pkghttp.StatusInternalServerError, err.Error())
+			return nil, Error(pkghttp.StatusInternalServerError, err.Error())
 		}
-		return "ok", nil
+		return []byte("ok"), nil
 	case slackevents.AppRateLimited:
-		return "", Error(pkghttp.StatusBadRequest, "app's event subscriptions are being rate limited")
+		return nil, Error(pkghttp.StatusBadRequest, "app's event subscriptions are being rate limited")
 	}
 
-	return "", Error(pkghttp.StatusBadRequest, "no matched any eventsAPIEvent.Type")
+	return nil, Error(pkghttp.StatusBadRequest, "no matched any eventsAPIEvent.Type")
 }
 
-func responseURLVerification(logger *zerolog.Logger, body []byte) (string, error) {
+func responseURLVerification(body []byte) ([]byte, error) {
 	var res *slackevents.ChallengeResponse
 	if err := json.Unmarshal(body, &res); err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return res.Challenge, nil
+	return []byte(res.Challenge), nil
 }
 
 func proxy(ctx context.Context, logger *zerolog.Logger, eventsAPIEvent slackevents.EventsAPIEvent) error {

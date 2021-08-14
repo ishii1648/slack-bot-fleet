@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	// "io/ioutil"
 	pkghttp "net/http"
 
 	"github.com/ishii1648/cloud-run-sdk/http"
@@ -19,37 +18,41 @@ func InjectVerifyRequest(eventYamlPath string) http.Middleware {
 			ctx := r.Context()
 			logger := zerolog.Ctx(ctx)
 
-			var body *exampleapi.RequestBody
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				errMsg := fmt.Sprintf("failed to unmarshal request body: %v", err)
-				logger.Error(errMsg)
-				pkghttp.Error(w, errMsg, pkghttp.StatusBadRequest)
-				return
-			}
-
-			items, err := route.ParseReactionAddedItem(eventYamlPath)
+			body, err := verifyRequest(eventYamlPath, r)
 			if err != nil {
-				errMsg := fmt.Sprintf("failed to parse routing.yml: %v", err)
-				logger.Error(errMsg)
-				pkghttp.Error(w, errMsg, pkghttp.StatusInternalServerError)
-				return
-			}
-
-			var matched bool
-			for _, item := range items {
-				if ok := item.Match(body.User, body.Reaction, body.ItemChannel); ok {
-					matched = true
-				}
-			}
-
-			if !matched {
-				errMsg := fmt.Sprintf("no matched item (user=%s, reaction=%s, channel={%v}, )", body.User, body.Reaction, body.ItemChannel)
-				logger.Error(errMsg)
-				pkghttp.Error(w, errMsg, pkghttp.StatusBadRequest)
+				logger.Errorf("failed to verify request: %v", err)
+				pkghttp.Error(w, err.Error(), pkghttp.StatusBadRequest)
 				return
 			}
 
 			h.ServeHTTP(w, r.WithContext(context.WithValue(ctx, "requestBody", body)))
 		})
 	}
+}
+
+func verifyRequest(eventYamlPath string, r *pkghttp.Request) (*exampleapi.RequestBody, error) {
+	var body *exampleapi.RequestBody
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal request body: %v", err)
+	}
+
+	items, err := route.ParseReactionAddedItem(eventYamlPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse routing.yml: %v", err)
+	}
+
+	var matched bool
+	for _, item := range items {
+		if ok := item.Match(body.User, body.Reaction, body.ItemChannel); ok {
+			matched = true
+			break
+		}
+	}
+
+	if !matched {
+		return nil, fmt.Errorf("no matched item (user=%s, reaction=%s, channel=%v)", body.User, body.Reaction, body.ItemChannel)
+	}
+
+	return body, nil
 }

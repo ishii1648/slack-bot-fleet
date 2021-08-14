@@ -2,6 +2,7 @@ package broker
 
 import (
 	"bytes"
+	"context"
 	pkghttp "net/http"
 	"net/http/httptest"
 	"strconv"
@@ -18,15 +19,12 @@ func TestInjectVerifyingSlackRequest(t *testing.T) {
 	rootLogger := zerolog.SetLogger(buf, false, true)
 	resprec := httptest.NewRecorder()
 
-	var run http.AppHandler = func(w pkghttp.ResponseWriter, r *pkghttp.Request) *http.Error {
-		requestBody, ok := r.Context().Value("requestBody").([]byte)
+	var run AppHandler = func(ctx context.Context) ([]byte, *AppError) {
+		requestBody, ok := ctx.Value("requestBody").([]byte)
 		if !ok {
 			t.Fatal("requestBody is not found")
 		}
-		if _, err := w.Write(requestBody); err != nil {
-			t.Fatal(err)
-		}
-		return nil
+		return requestBody, nil
 	}
 
 	handler := http.Chain(run, http.InjectLogger(rootLogger, "google-sample-project"), InjectVerifyingSlackRequest(true))
