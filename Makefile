@@ -1,6 +1,9 @@
 .PHONY: build
 build: build-service-broker build-example
 
+.PHONY: deploy
+deploy: deploy-service-broker deploy-example
+
 ## service-broker
 
 .PHONY: build-service-broker

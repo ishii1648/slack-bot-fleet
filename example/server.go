@@ -2,18 +2,21 @@ package example
 
 import (
 	"context"
+	pkghttp "net/http"
 
+	"github.com/ishii1648/cloud-run-sdk/http"
 	"github.com/ishii1648/cloud-run-sdk/logging/zerolog"
-	pb "github.com/ishii1648/slack-bot-fleet/proto/reaction-added-event"
+	exampleapi "github.com/ishii1648/slack-bot-fleet/api/example"
 )
 
-type Server struct {
-	pb.UnimplementedReactionServer
-}
+func Run(ctx context.Context) ([]byte, *http.AppError) {
+	body, ok := ctx.Value("requestBody").(*exampleapi.RequestBody)
+	if !ok {
+		return nil, http.Error(pkghttp.StatusBadRequest, "requestBody not found")
+	}
 
-func (s *Server) Run(ctx context.Context, r *pb.Request) (*pb.Result, error) {
 	logger := zerolog.Ctx(ctx)
-	logger.Infof("revice request (reaction=%s, user=%s, item={%v})", r.Reaction, r.User, r.Item)
+	logger.Infof("revice request (user=%s, reaction=%s, channel=%v)", body.User, body.Reaction, body.ItemChannel)
 
-	return &pb.Result{Message: "ok"}, nil
+	return []byte("ok"), nil
 }

@@ -2,43 +2,57 @@ package example
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	pkghttp "net/http"
 
+	"github.com/ishii1648/cloud-run-sdk/http"
 	"github.com/ishii1648/cloud-run-sdk/logging/zerolog"
-	"github.com/ishii1648/slack-bot-fleet/pkg/event"
-	pb "github.com/ishii1648/slack-bot-fleet/proto/reaction-added-event"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	exampleapi "github.com/ishii1648/slack-bot-fleet/api/example"
+	"github.com/ishii1648/slack-bot-fleet/pkg/route"
 )
 
-func VerifyRequestInterceptor(eventYamlPath string) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		logger := zerolog.Ctx(ctx)
+func InjectVerifyRequest(eventYamlPath string) http.Middleware {
+	return func(h pkghttp.Handler) pkghttp.Handler {
+		return pkghttp.HandlerFunc(func(w pkghttp.ResponseWriter, r *pkghttp.Request) {
+			ctx := r.Context()
+			logger := zerolog.Ctx(ctx)
 
-		r, ok := req.(*pb.Request)
-		if !ok {
-			logger.Error("failed to cast request")
-			return nil, status.Error(codes.InvalidArgument, "failed to cast request")
-		}
-
-		items, err := event.ParseReactionAddedItem(eventYamlPath)
-		if err != nil {
-			logger.Errorf("failed parse event.yaml : %v", err)
-			return nil, status.Error(codes.Internal, "failed parse event.yaml")
-		}
-
-		var matched bool
-		for _, item := range items {
-			if ok := item.Match(r.User, r.Reaction, r.Item.Channel); ok {
-				matched = true
+			body, err := verifyRequest(eventYamlPath, r)
+			if err != nil {
+				logger.Errorf("failed to verify request: %v", err)
+				pkghttp.Error(w, err.Error(), pkghttp.StatusBadRequest)
+				return
 			}
-		}
 
-		if !matched {
-			logger.Errorf("no matched item (reaction=%s, user=%s, item={%v})", r.Reaction, r.User, r.Item)
-			return nil, status.Error(codes.InvalidArgument, "no matched item")
-		}
-
-		return handler(ctx, req)
+			h.ServeHTTP(w, r.WithContext(context.WithValue(ctx, "requestBody", body)))
+		})
 	}
+}
+
+func verifyRequest(eventYamlPath string, r *pkghttp.Request) (*exampleapi.RequestBody, error) {
+	var body *exampleapi.RequestBody
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal request body: %v", err)
+	}
+
+	items, err := route.ParseReactionAddedItem(eventYamlPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse routing.yml: %v", err)
+	}
+
+	var matched bool
+	for _, item := range items {
+		if ok := item.Match(body.User, body.Reaction, body.ItemChannel); ok {
+			matched = true
+			break
+		}
+	}
+
+	if !matched {
+		return nil, fmt.Errorf("no matched item (user=%s, reaction=%s, channel=%v)", body.User, body.Reaction, body.ItemChannel)
+	}
+
+	return body, nil
 }

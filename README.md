@@ -33,14 +33,15 @@ EOF
 ### example
 
 ```
-grpcurl -plaintext -d @ localhost:8081 reaction.Reaction.Run <<EOM
+curl --dump-header - -XPOST \
+-H "Content-Type: application/json" \
+-H "X-Cloud-Trace-Context:0123456789abcdef0123456789abcdef/123;o=1" \
+-d @- localhost:8080 <<EOF
 {
-    "reaction": "reaction_added",
+    "reaction": "ok_hand",
     "user": "s_ishii",
-    "item": {
-        "channel": "development",
-        "ts": "1620581892.006600"
-    }
+    "itemChannel": "development",
+    "itemTimestamp": "1622040734.000100"
 }
-EOM
+EOF
 ```

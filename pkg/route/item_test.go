@@ -1,4 +1,4 @@
-package event
+package route
 
 import (
 	"reflect"
@@ -6,7 +6,7 @@ import (
 )
 
 func TestParseReactionAddedItem(t *testing.T) {
-	items, err := ParseReactionAddedItem("../../tests/event.yaml")
+	items, err := ParseReactionAddedItem("../../tests/routing.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
