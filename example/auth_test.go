@@ -42,7 +42,7 @@ func TestVerifyRequestInterceptor(t *testing.T) {
 
 	for _, tt := range tests {
 		ctx := context.Background()
-		resp, err := VerifyRequestInterceptor("../tests/event.yaml")(ctx, tt.req, nil, unaryHandler)
+		resp, err := VerifyRequestInterceptor("../tests/routing.yml")(ctx, tt.req, nil, unaryHandler)
 		if tt.want {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)

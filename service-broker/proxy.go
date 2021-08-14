@@ -4,104 +4,93 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	pkghttp "net/http"
 	"os"
-	"time"
 
-	"github.com/ishii1648/cloud-run-sdk/grpc"
-	"github.com/ishii1648/cloud-run-sdk/http"
+	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	"github.com/ishii1648/cloud-run-sdk/logging/zerolog"
-	eventItem "github.com/ishii1648/slack-bot-fleet/pkg/event"
-	pb "github.com/ishii1648/slack-bot-fleet/proto/reaction-added-event"
+	"github.com/ishii1648/cloud-run-sdk/util"
+	exampleapi "github.com/ishii1648/slack-bot-fleet/api/example"
+	"github.com/ishii1648/slack-bot-fleet/pkg/route"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 	"go.opencensus.io/trace"
-	pkggrpc "google.golang.org/grpc"
+	taskspb "google.golang.org/genproto/googleapis/cloud/tasks/v2"
 )
 
-func Run(w pkghttp.ResponseWriter, r *pkghttp.Request) *http.AppError {
-	ctx := r.Context()
+func Run(ctx context.Context) (string, *AppError) {
 	logger := zerolog.Ctx(ctx)
 
 	body, ok := ctx.Value("requestBody").([]byte)
 	if !ok {
-		return http.Error(pkghttp.StatusBadRequest, "requestBody not found")
+		return "", Error(pkghttp.StatusBadRequest, "requestBody not found")
 	}
 
 	eventsAPIEvent, err := slackevents.ParseEvent(json.RawMessage(body), slackevents.OptionNoVerifyToken())
 	if err != nil {
-		return http.Errorf(pkghttp.StatusBadRequest, "failed to parse event: %v", err)
+		return "", Errorf(pkghttp.StatusBadRequest, "failed to parse event: %v", err)
 	}
 
 	switch eventsAPIEvent.Type {
 	case slackevents.URLVerification:
-		if err := responseURLVerification(logger, w, body); err != nil {
-			return http.Errorf(pkghttp.StatusInternalServerError, "failed to response URLVerification: %v", err)
+		challangeRes, err := responseURLVerification(logger, body)
+		if err != nil {
+			return "", Errorf(pkghttp.StatusInternalServerError, "failed to response URLVerification: %v", err)
 		}
+		return challangeRes, nil
 	case slackevents.CallbackEvent:
-		// We should response before request gRPC,
-		// because Slack API resend request within 3 seconds.
-		if _, err := w.Write([]byte("ok")); err != nil {
-			logger.Errorf("failed to Write http.ResponseWriter: %v", err)
-			return nil
-		}
-
 		if err := proxy(ctx, logger, eventsAPIEvent); err != nil {
-			// just log errer message
-			logger.Errorf("failed to proxy: %v", err)
+			return "", Error(pkghttp.StatusInternalServerError, err.Error())
 		}
+		return "ok", nil
 	case slackevents.AppRateLimited:
-		return http.Error(pkghttp.StatusBadRequest, "app's event subscriptions are being rate limited")
+		return "", Error(pkghttp.StatusBadRequest, "app's event subscriptions are being rate limited")
 	}
 
-	return nil
+	return "", Error(pkghttp.StatusBadRequest, "no matched any eventsAPIEvent.Type")
 }
 
-func responseURLVerification(logger *zerolog.Logger, w pkghttp.ResponseWriter, body []byte) error {
+func responseURLVerification(logger *zerolog.Logger, body []byte) (string, error) {
 	var res *slackevents.ChallengeResponse
 	if err := json.Unmarshal(body, &res); err != nil {
-		return err
+		return "", err
 	}
 
-	w.Header().Set("Content-Type", "text/plain")
-	if _, err := w.Write([]byte(res.Challenge)); err != nil {
-		logger.Errorf("failed to Write res.Challange: %v", err)
-		return nil
-	}
-
-	return nil
+	return res.Challenge, nil
 }
 
 func proxy(ctx context.Context, logger *zerolog.Logger, eventsAPIEvent slackevents.EventsAPIEvent) error {
-	slackBotToken, isSet := os.LookupEnv("SLACK_BOT_TOKEN")
-	if !isSet {
-		return errors.New("SLACK_BOT_TOKEN is not set")
+	projectID, err := util.FetchProjectID()
+	if err != nil {
+		return fmt.Errorf("failed to fetch projectID: %v", err)
 	}
 
+	slackBotToken, err := util.FetchSecretLatestVersion(ctx, "slack-bot-token", projectID)
+	if err != nil {
+		return err
+	}
 	slackClient := slack.New(slackBotToken)
 
 	switch event := eventsAPIEvent.InnerEvent.Data.(type) {
 	case *slackevents.ReactionAddedEvent:
-		user, err := slackClient.GetUserInfoContext(ctx, event.User)
+		e, err := newReactionAddedEvent(ctx, slackClient, event, logger, projectID)
+		if err != nil {
+			return fmt.Errorf("failed to create ReactionAddedEvent: %w", err)
+		}
+		logger.Infof("recieved ReactionAddedEvent(user: %s, channel: %s, reaction: %s)", e.userRealName, e.channelName, event.Reaction)
+
+		items, err := route.ParseReactionAddedItem("./routing.yml")
 		if err != nil {
 			return err
 		}
 
-		channel, err := slackClient.GetConversationInfoContext(ctx, event.Item.Channel, false)
+		item, body, err := e.getMatchedItem(ctx, items)
 		if err != nil {
 			return err
 		}
 
-		logger.Infof("recieved ReactionAddedEvent(user : %s, channel: %s, reaction: %s)", user.RealName, channel.Name, event.Reaction)
-
-		e := &ReactionAddedEvent{
-			userRealName: user.RealName,
-			channelName:  channel.Name,
-			event:        event,
-			logger:       logger,
-		}
-
-		if err := e.run(ctx); err != nil {
+		if err := e.createHTTPTaskWithToken(ctx, body, item); err != nil {
 			return err
 		}
 
@@ -114,79 +103,120 @@ func proxy(ctx context.Context, logger *zerolog.Logger, eventsAPIEvent slackeven
 type ReactionAddedEvent struct {
 	userRealName string
 	channelName  string
+	projectID    string
+	locationID   string
 	event        *slackevents.ReactionAddedEvent
 	logger       *zerolog.Logger
 }
 
-func (e *ReactionAddedEvent) run(ctx context.Context) error {
-	items, err := eventItem.ParseReactionAddedItem("./event.yaml")
+func newReactionAddedEvent(ctx context.Context, s *slack.Client, event *slackevents.ReactionAddedEvent, logger *zerolog.Logger, projectID string) (*ReactionAddedEvent, error) {
+	sc := trace.FromContext(ctx).SpanContext()
+	_, span := trace.StartSpanWithRemoteParent(ctx, "newReactionAddedEvent", sc)
+	defer span.End()
+
+	user, err := s.GetUserInfoContext(ctx, event.User)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	item, req, err := e.getMatchedItem(ctx, items)
+	channel, err := s.GetConversationInfoContext(ctx, event.Item.Channel, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	serviceAddr, isLocalhost, err := item.FetchServiceAddr(ctx)
-	if err != nil {
-		return err
-	}
-	e.logger.Debugf("get destination service address : %s", serviceAddr)
-
-	if err := e.SendRequest(ctx, req, serviceAddr, isLocalhost); err != nil {
-		return err
+	location, isSet := os.LookupEnv("CLOUD_RUN_LOCATION")
+	if !isSet {
+		location = "asia-northeast1"
 	}
 
-	return nil
+	return &ReactionAddedEvent{
+		userRealName: user.RealName,
+		channelName:  channel.Name,
+		event:        event,
+		logger:       logger,
+		projectID:    projectID,
+		locationID:   location,
+	}, nil
 }
 
-func (e *ReactionAddedEvent) getMatchedItem(ctx context.Context, items []eventItem.ReactionAddedItem) (*eventItem.ReactionAddedItem, *pb.Request, error) {
+func (e *ReactionAddedEvent) getMatchedItem(ctx context.Context, items []route.ReactionAddedItem) (*route.ReactionAddedItem, *exampleapi.RequestBody, error) {
 	sc := trace.FromContext(ctx).SpanContext()
 	_, span := trace.StartSpanWithRemoteParent(ctx, "ReactionAddedEvent.getMatchedItem", sc)
 	defer span.End()
 
 	for _, item := range items {
 		if ok := item.Match(e.userRealName, e.event.Reaction, e.channelName); ok {
-			req := &pb.Request{
-				Reaction: e.event.Reaction,
-				User:     e.userRealName,
-				Item: &pb.EventItem{
-					Channel: e.channelName,
-					Ts:      e.event.Item.Timestamp,
-				},
+			requestBody := &exampleapi.RequestBody{
+				Reaction:      e.event.Reaction,
+				User:          e.userRealName,
+				ItemChannel:   e.channelName,
+				ItemTimestamp: e.event.Item.Timestamp,
 			}
-			return &item, req, nil
+			return &item, requestBody, nil
 		}
 	}
 
 	return nil, nil, errors.New("no matched item")
 }
 
-func (e *ReactionAddedEvent) SendRequest(ctx context.Context, req *pb.Request, serviceAddr string, isLocalhost bool) error {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
+func (e *ReactionAddedEvent) createHTTPTaskWithToken(ctx context.Context, requestBody *exampleapi.RequestBody, item *route.ReactionAddedItem) error {
+	sc := trace.FromContext(ctx).SpanContext()
+	_, span := trace.StartSpanWithRemoteParent(ctx, "ReactionAddedEvent.createHTTPTaskWithToken", sc)
+	defer span.End()
 
-	var conn *pkggrpc.ClientConn
-	var err error
-	if isLocalhost {
-		conn, err = pkggrpc.DialContext(ctx, serviceAddr, pkggrpc.WithInsecure())
-	} else {
-		conn, err = grpc.NewTLSConn(ctx, serviceAddr, pkggrpc.WithUnaryInterceptor(grpc.TraceIDInterceptor))
-	}
+	serviceURL, err := item.FetchServiceURL(ctx, e.projectID, e.locationID)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	e.logger.Debugf("get destination service address : %s", serviceURL)
 
-	c := pb.NewReactionClient(conn)
-
-	resp, err := c.Run(ctx, req)
+	requestBodyJson, err := json.Marshal(requestBody)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to Marshal RequestBody: %w", err)
 	}
-	e.logger.Infof("received message from %s : %s", serviceAddr, resp.Message)
+
+	serviceAccountID, isSet := os.LookupEnv("SERVICE_ACCOUNT_ID")
+	if !isSet {
+		serviceAccountID = "run-invoker"
+	}
+
+	client, err := cloudtasks.NewClient(ctx)
+	if err != nil {
+		return fmt.Errorf("cloudtasks.NewClient: %w", err)
+	}
+	defer client.Close()
+
+	traceID, ok := ctx.Value("x-cloud-trace-context").(string)
+	if !ok {
+		return errors.New("traceID not found")
+	}
+
+	queueID := item.ServiceName + "-task-queue"
+	req := &taskspb.CreateTaskRequest{
+		Parent: fmt.Sprintf("projects/%s/locations/%s/queues/%s", e.projectID, e.locationID, queueID),
+		Task: &taskspb.Task{
+			// https://godoc.org/google.golang.org/genproto/googleapis/cloud/tasks/v2#HttpRequest
+			MessageType: &taskspb.Task_HttpRequest{
+				HttpRequest: &taskspb.HttpRequest{
+					HttpMethod: taskspb.HttpMethod_POST,
+					Url:        serviceURL,
+					Headers:    map[string]string{"X-Cloud-Trace-Context": traceID},
+					Body:       requestBodyJson,
+					AuthorizationHeader: &taskspb.HttpRequest_OidcToken{
+						OidcToken: &taskspb.OidcToken{
+							ServiceAccountEmail: fmt.Sprintf("%s@%s.iam.gserviceaccount.com", serviceAccountID, e.projectID),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	task, err := client.CreateTask(ctx, req)
+	if err != nil {
+		return fmt.Errorf("cloudtasks.CreateTask: %w", err)
+	}
+	e.logger.Infof("created task: %s", task.Name)
 
 	return nil
 }

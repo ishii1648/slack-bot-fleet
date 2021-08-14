@@ -5,11 +5,12 @@ import (
 	"os"
 
 	"contrib.go.opencensus.io/exporter/stackdriver"
-	"github.com/ishii1648/cloud-run-sdk/grpc"
+	"contrib.go.opencensus.io/exporter/stackdriver/propagation"
+	"github.com/ishii1648/cloud-run-sdk/http"
 	"github.com/ishii1648/cloud-run-sdk/logging/zerolog"
 	"github.com/ishii1648/cloud-run-sdk/util"
 	"github.com/ishii1648/slack-bot-fleet/example"
-	pb "github.com/ishii1648/slack-bot-fleet/proto/reaction-added-event"
+	"go.opencensus.io/plugin/ochttp"
 	"go.opencensus.io/trace"
 )
 
@@ -30,7 +31,7 @@ func main() {
 
 	if util.IsCloudRun() {
 		exporter, err := stackdriver.NewExporter(stackdriver.Options{
-			MetricPrefix: "example",
+			MetricPrefix: "service-broker",
 		})
 		if err != nil {
 			rootLogger.Errorf("failed to NewExporter : %v", err)
@@ -39,14 +40,13 @@ func main() {
 		trace.RegisterExporter(exporter)
 	}
 
-	s := grpc.NewServer(rootLogger, projectID, example.VerifyRequestInterceptor("./event.yaml"))
-	pb.RegisterReactionServer(s.Srv, &example.Server{})
+	server := http.NewServerWithLogger(rootLogger, projectID)
 
-	lis, err := grpc.CreateNetworkListener()
-	if err != nil {
-		rootLogger.Errorf("failed to create listener : %v", err)
-		os.Exit(1)
+	httpHandler := &ochttp.Handler{
+		Handler:     http.Chain(http.AppHandler(example.Run), http.InjectLogger(rootLogger, projectID), example.InjectVerifyRequest("./routing.yml")),
+		Propagation: &propagation.HTTPFormat{},
 	}
 
-	s.Start(lis, util.SetupSignalHandler())
+	server.Handle("/", httpHandler)
+	server.Start(util.SetupSignalHandler())
 }

@@ -44,7 +44,7 @@ func main() {
 	server := http.NewServerWithLogger(rootLogger, projectID)
 
 	httpHandler := &ochttp.Handler{
-		Handler:     http.Chain(http.AppHandler(broker.Run), http.InjectLogger(rootLogger, projectID), broker.InjectVerifyingSlackRequest(*disableAuthFlag)),
+		Handler:     http.Chain(broker.AppHandler(broker.Run), http.InjectLogger(rootLogger, projectID), broker.InjectVerifyingSlackRequest(*disableAuthFlag)),
 		Propagation: &propagation.HTTPFormat{},
 	}
 

@@ -1,11 +1,9 @@
-package event
+package route
 
 import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"os"
-	"strings"
 
 	"github.com/ishii1648/cloud-run-sdk/util"
 	"go.opencensus.io/trace"
@@ -63,42 +61,17 @@ func (i *ReactionAddedItem) Match(userRealName, reaction, channelName string) bo
 	return true
 }
 
-func (i *ReactionAddedItem) FetchServiceAddr(ctx context.Context) (addr string, isLocalhost bool, err error) {
+func (i *ReactionAddedItem) FetchServiceURL(ctx context.Context, projectID, locationID string) (string, error) {
 	sc := trace.FromContext(ctx).SpanContext()
 	_, span := trace.StartSpanWithRemoteParent(ctx, "ReactionAddedItem.FetchServiceAddr", sc)
 	defer span.End()
 
-	port, isSet := os.LookupEnv("GRPC_PORT")
-	if !isSet {
-		port = "443"
+	url, err := util.FetchURLByServiceName(ctx, i.ServiceName, locationID, projectID)
+	if err != nil {
+		return "", err
 	}
 
-	if util.IsCloudRun() {
-		var projectID, url string
-		projectID, err = util.FetchProjectID()
-		if err != nil {
-			return addr, isLocalhost, err
-		}
-
-		location, isSet := os.LookupEnv("CLOUD_RUN_LOCATION")
-		if !isSet {
-			location = "asia-northeast1"
-		}
-
-		url, err = util.FetchURLByServiceName(ctx, i.ServiceName, location, projectID)
-		if err != nil {
-			return addr, isLocalhost, err
-		}
-
-		addr = strings.Replace(url, "https://", "", 1) + ":" + port
-
-		return addr, isLocalhost, nil
-	}
-
-	addr = "localhost:" + port
-	isLocalhost = true
-
-	return addr, isLocalhost, nil
+	return url, nil
 }
 
 func contain(target string, searchStrs []string) bool {
