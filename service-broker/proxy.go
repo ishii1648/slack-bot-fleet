@@ -10,7 +10,7 @@ import (
 
 	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	"github.com/ishii1648/cloud-run-sdk/logging/zerolog"
-	"github.com/ishii1648/cloud-run-sdk/util"
+	// "github.com/ishii1648/cloud-run-sdk/util"
 	exampleapi "github.com/ishii1648/slack-bot-fleet/api/example"
 	"github.com/ishii1648/slack-bot-fleet/pkg/route"
 	"github.com/slack-go/slack"
@@ -33,69 +33,69 @@ func Run(ctx context.Context) ([]byte, *AppError) {
 	}
 
 	switch eventsAPIEvent.Type {
+	case slackevents.AppRateLimited:
+		return nil, Error(pkghttp.StatusBadRequest, "app's event subscriptions are being rate limited")
+	// challenge request when Request URL of Event Subscriptions is set
 	case slackevents.URLVerification:
-		challangeRes, err := responseURLVerification(body)
-		if err != nil {
+		var res *slackevents.ChallengeResponse
+		if err := json.Unmarshal(body, &res); err != nil {
 			return nil, Errorf(pkghttp.StatusInternalServerError, "failed to response URLVerification: %v", err)
 		}
-		return challangeRes, nil
+		return []byte(res.Challenge), nil
 	case slackevents.CallbackEvent:
 		if err := proxy(ctx, logger, eventsAPIEvent); err != nil {
 			return nil, Error(pkghttp.StatusInternalServerError, err.Error())
 		}
 		return []byte("ok"), nil
-	case slackevents.AppRateLimited:
-		return nil, Error(pkghttp.StatusBadRequest, "app's event subscriptions are being rate limited")
 	}
 
 	return nil, Error(pkghttp.StatusBadRequest, "no matched any eventsAPIEvent.Type")
 }
 
-func responseURLVerification(body []byte) ([]byte, error) {
-	var res *slackevents.ChallengeResponse
-	if err := json.Unmarshal(body, &res); err != nil {
-		return nil, err
-	}
-
-	return []byte(res.Challenge), nil
-}
-
 func proxy(ctx context.Context, logger *zerolog.Logger, eventsAPIEvent slackevents.EventsAPIEvent) error {
-	projectID, err := util.FetchProjectID()
-	if err != nil {
-		return fmt.Errorf("failed to fetch projectID: %v", err)
-	}
+	// projectID, err := util.FetchProjectID()
+	// if err != nil {
+	// 	return fmt.Errorf("failed to fetch projectID: %v", err)
+	// }
 
-	slackBotToken, err := util.FetchSecretLatestVersion(ctx, "slack-bot-token", projectID)
-	if err != nil {
-		return err
-	}
-	slackClient := slack.New(slackBotToken)
+	// slackBotToken, isSet := os.LookupEnv("SLACK_BOT_TOKEN")
+	// if !isSet {
+	// 	return errors.New("SLACK_BOT_TOKEN is not set")
+	// }
+	// slackClient := slack.New(slackBotToken)
 
-	switch event := eventsAPIEvent.InnerEvent.Data.(type) {
-	case *slackevents.ReactionAddedEvent:
-		e, err := newReactionAddedEvent(ctx, slackClient, event, logger, projectID)
-		if err != nil {
-			return fmt.Errorf("failed to create ReactionAddedEvent: %w", err)
-		}
-		logger.Infof("recieved ReactionAddedEvent(user: %s, channel: %s, reaction: %s)", e.userRealName, e.channelName, event.Reaction)
+	// switch event := eventsAPIEvent.InnerEvent.Data.(type) {
+	// case *slackevents.AppMentionEvent:
+	// 	// items, err := route.ParseAppMentionItem("./routing.yml")
+	// 	// if err != nil {
+	// 	// 	return err
+	// 	// }
 
-		items, err := route.ParseReactionAddedItem("./routing.yml")
-		if err != nil {
-			return err
-		}
+	// 	// var event_ *slackevents.AppMentionEvent
+	// 	// event_.Text
+	// case *slackevents.ReactionAddedEvent:
+	// 	e, err := newReactionAddedEvent(ctx, slackClient, event, logger, projectID)
+	// 	if err != nil {
+	// 		return fmt.Errorf("failed to create ReactionAddedEvent: %w", err)
+	// 	}
+	// 	logger.Infof("recieved ReactionAddedEvent(user: %s, channel: %s, reaction: %s)", e.userRealName, e.channelName, event.Reaction)
 
-		item, body, err := e.getMatchedItem(ctx, items)
-		if err != nil {
-			return err
-		}
+	// 	items, err := route.ParseReactionAddedItem("./routing.yml")
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
-		if err := e.createHTTPTaskWithToken(ctx, body, item); err != nil {
-			return err
-		}
+	// 	item, body, err := e.getMatchedItem(ctx, items)
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
-		return nil
-	}
+	// 	if err := e.createHTTPTaskWithToken(ctx, body, item); err != nil {
+	// 		return err
+	// 	}
+
+	// 	return nil
+	// }
 
 	return nil
 }

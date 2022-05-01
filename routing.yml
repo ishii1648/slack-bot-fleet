@@ -7,3 +7,9 @@
     - "development"
   reactions:
     - "ok_hand"
+- service_name: impersonate
+  type: app_mention
+  users:
+    - s_ishii
+  item_channels:
+    - development

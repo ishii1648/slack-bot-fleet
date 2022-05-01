@@ -6,9 +6,65 @@ import (
 	"io/ioutil"
 
 	"github.com/ishii1648/cloud-run-sdk/util"
+	"github.com/ishii1648/slack-bot-fleet/pkg/slack"
+	"github.com/slack-go/slack"
 	"go.opencensus.io/trace"
 	"gopkg.in/yaml.v2"
 )
+
+type Item interface {
+	Parse(ymlPath string) ([]Item, error)
+	Match() bool
+}
+
+type AppMentionItem struct {
+	ServiceName  string   `yaml:"service_name"`
+	Type         string   `yaml:"type"`
+	Users        []string `yaml:"users"`
+	ItemChannels []string `yaml:"item_channels"`
+	Text         string   `yaml:"text"`
+}
+
+func NewAppMentionItem() *AppMentionItem {
+	return &AppMentionItem{}
+}
+
+func (i *AppMentionItem) Parse(ymlPath string) error {
+	ymlFile, err := ioutil.ReadFile(ymlPath)
+	if err != nil {
+		return err
+	}
+
+	if err := yaml.Unmarshal(ymlFile, &i); err != nil {
+		return err
+	}
+
+	if len(i.Users) == 0 {
+		return fmt.Errorf("no set users on %s", ymlPath)
+	}
+	if len(i.ItemChannels) == 0 {
+		return fmt.Errorf("no set item_channels on %s", ymlPath)
+	}
+	if i.Text == "" {
+		return fmt.Errorf("no set text on %s", ymlPath)
+	}
+
+	return nil
+}
+
+func (i *AppMentionItem) Match(event slack.Event) bool {
+	return true
+}
+
+func contain(target string, searchStrs []string) bool {
+	for _, str := range searchStrs {
+		if target == str {
+			return true
+		}
+	}
+
+	return false
+}
 
 type ReactionAddedItem struct {
 	ServiceName  string   `yaml:"service_name"`
@@ -18,7 +74,11 @@ type ReactionAddedItem struct {
 	ItemChannels []string `yaml:"item_channels"`
 }
 
-func ParseReactionAddedItem(ymlPath string) ([]ReactionAddedItem, error) {
+func NewReactionAddedItem() *ReactionAddedItem {
+	return &ReactionAddedItem{}
+}
+
+func (i *ReactionAddedItem) Parse(ymlPath string) ([]ReactionAddedItem, error) {
 	var items []ReactionAddedItem
 
 	ymlFile, err := ioutil.ReadFile(ymlPath)
@@ -72,14 +132,4 @@ func (i *ReactionAddedItem) FetchServiceURL(ctx context.Context, projectID, loca
 	}
 
 	return url, nil
-}
-
-func contain(target string, searchStrs []string) bool {
-	for _, str := range searchStrs {
-		if target == str {
-			return true
-		}
-	}
-
-	return false
 }

@@ -63,3 +63,7 @@ run-service-broker:
 .PHONY: run example
 run-example:
 	go run ./cmd/example/main.go -debug
+
+## local test
+setup-local:
+	grok http 8080
