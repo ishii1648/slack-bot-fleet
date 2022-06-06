@@ -1,11 +1,13 @@
 package googlecloud
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os/exec"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"gopkg.in/yaml.v2"
 )
 
@@ -18,6 +20,39 @@ type Role struct {
 func LoadProjectRoles(path string) ([]Role, error) {
 	var roles, projectRoles []Role
 	yamlFile, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := yaml.Unmarshal(yamlFile, &roles); err != nil {
+		return nil, err
+	}
+
+	for _, role := range roles {
+		if role.Resource == "project" {
+			projectRoles = append(projectRoles, role)
+		}
+	}
+
+	return projectRoles, nil
+}
+
+func FetchProjectRoles(ctx context.Context, bucketName string) ([]Role, error) {
+	var roles, projectRoles []Role
+
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	bucket := client.Bucket(bucketName)
+	rc, err := bucket.Object("roles.yml").NewReader(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	yamlFile, err := ioutil.ReadAll(rc)
 	if err != nil {
 		return nil, err
 	}

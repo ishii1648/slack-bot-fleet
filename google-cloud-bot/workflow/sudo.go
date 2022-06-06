@@ -50,7 +50,12 @@ func (w *SudoWorkflow) Action() *ActionWorkflow {
 }
 
 func (w *SudoWorkflow) Handle(ctx echo.Context) error {
-	projects, err := googlecloud.LoadProjects("./projects.yml")
+	bucketName, isSet := os.LookupEnv("BUCKET_NAME")
+	if !isSet {
+		return errors.New("BUCKET_NAME is not set")
+	}
+
+	projects, err := googlecloud.FetchProjects(ctx.Request().Context(), bucketName)
 	if err != nil {
 		return err
 	}
@@ -70,7 +75,12 @@ func (w *SudoWorkflow) Handle(ctx echo.Context) error {
 func (w *SudoWorkflow) SelectProjectRoles(ctx context.Context, interaction slack.AttachmentActionCallback, nextActionID string) error {
 	w.projectID = interaction.ActionCallback.BlockActions[0].SelectedOption.Text.Text
 
-	projectRoles, err := googlecloud.LoadProjectRoles("./roles.yml")
+	bucketName, isSet := os.LookupEnv("BUCKET_NAME")
+	if !isSet {
+		return errors.New("BUCKET_NAME is not set")
+	}
+
+	projectRoles, err := googlecloud.FetchProjectRoles(ctx, bucketName)
 	if err != nil {
 		return err
 	}
