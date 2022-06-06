@@ -1,0 +1,15 @@
+- id: roles/compute.admin
+  name: Compute 管理者
+  resource: project
+- id: roles/container.admin
+  name: Kubernetes Engine 管理者
+  resource: project
+- id: roles/resourcemanager.projectIamAdmin
+  name: プロジェクト IAM 管理者
+  resource: project
+- id: roles/resourcemanager.folderAdmin
+  name: フォルダ管理者
+  resource: folder
+- id: roles/resourcemanager.organizationAdmin
+  name: 組織管理者
+  resource: organization
